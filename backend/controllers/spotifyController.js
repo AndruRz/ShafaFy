@@ -13,7 +13,7 @@ const getSpotifyToken = async () => {
 
   const response = await axios.post(
     'https://accounts.spotify.com/api/token',
-    'grant_type=client_credentials',
+    new URLSearchParams({ grant_type: 'client_credentials' }).toString(),
     {
       headers: {
         Authorization: `Basic ${credentials}`,
@@ -38,24 +38,37 @@ const mapTrack = (track) => ({
   popularity: track.popularity,
 });
 
+// ─── Construir URL manualmente para evitar problemas de serialización ─────────
+const buildSpotifySearchUrl = (params) => {
+  const url = new URL('https://api.spotify.com/v1/search');
+  Object.entries(params).forEach(([key, value]) => {
+    url.searchParams.append(key, String(value));
+  });
+  return url.toString();
+};
+
 // ─── GET /api/spotify/featured ────────────────────────────────────────────────
 exports.getFeaturedTracks = async (req, res) => {
   try {
     const token = await getSpotifyToken();
+    console.log('✅ Token obtenido correctamente');
 
-    const response = await axios.get('https://api.spotify.com/v1/search', {
+    // Construimos la URL manualmente para garantizar que limit sea un número válido
+    const searchUrl = buildSpotifySearchUrl({
+      q: 'pop hits',
+      type: 'track',
+      limit: 20,
+      market: 'US',
+    });
+
+    console.log('🔗 URL de búsqueda:', searchUrl);
+
+    const response = await axios.get(searchUrl, {
       headers: { Authorization: `Bearer ${token}` },
-      params: {
-        q: 'year:2024',
-        type: 'track',
-        limit: 20,
-        market: 'US',
-      },
     });
 
     const allTracks = response.data.tracks.items.map(mapTrack);
 
-    // Poner primero las que tienen preview
     const withPreview = allTracks.filter((t) => t.previewUrl);
     const withoutPreview = allTracks.filter((t) => !t.previewUrl);
 
@@ -66,7 +79,8 @@ exports.getFeaturedTracks = async (req, res) => {
       tracks: [...withPreview, ...withoutPreview],
     });
   } catch (error) {
-    console.error('Error en getFeaturedTracks:', error.response?.data || error.message);
+    console.error('❌ Error en getFeaturedTracks:', JSON.stringify(error.response?.data, null, 2) || error.message);
+    console.error('❌ Status HTTP:', error.response?.status);
     res.status(500).json({
       success: false,
       message: 'Error al cargar canciones',
@@ -78,27 +92,31 @@ exports.getFeaturedTracks = async (req, res) => {
 // ─── GET /api/spotify/search?q=...&limit=20 ──────────────────────────────────
 exports.searchTracks = async (req, res) => {
   try {
-    const { q, limit = 30 } = req.query;
+    const { q, limit } = req.query;
 
     if (!q || q.trim() === '') {
       return res.status(400).json({ success: false, message: 'El parámetro q es requerido' });
     }
 
+    // Validar y limpiar el límite
+    const parsedLimit = parseInt(limit, 10);
+    const safeLimit = !isNaN(parsedLimit) && parsedLimit >= 1 && parsedLimit <= 50 ? parsedLimit : 20;
+
     const token = await getSpotifyToken();
 
-    const response = await axios.get('https://api.spotify.com/v1/search', {
+    const searchUrl = buildSpotifySearchUrl({
+      q: q.trim(),
+      type: 'track',
+      limit: safeLimit,
+      market: 'US',
+    });
+
+    const response = await axios.get(searchUrl, {
       headers: { Authorization: `Bearer ${token}` },
-      params: {
-        q: q.trim(),
-        type: 'track',
-        limit: parseInt(limit),
-        market: 'US',
-      },
     });
 
     const allTracks = response.data.tracks.items.map(mapTrack);
 
-    // Poner primero las que tienen preview
     const withPreview = allTracks.filter((t) => t.previewUrl);
     const withoutPreview = allTracks.filter((t) => !t.previewUrl);
 
@@ -109,7 +127,7 @@ exports.searchTracks = async (req, res) => {
       tracks: [...withPreview, ...withoutPreview],
     });
   } catch (error) {
-    console.error('Error en searchTracks:', error.response?.data || error.message);
+    console.error('❌ Error en searchTracks:', JSON.stringify(error.response?.data, null, 2) || error.message);
     res.status(500).json({
       success: false,
       message: 'Error al buscar canciones',
@@ -124,14 +142,16 @@ exports.getTrackById = async (req, res) => {
     const { id } = req.params;
     const token = await getSpotifyToken();
 
-    const response = await axios.get(`https://api.spotify.com/v1/tracks/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      params: { market: 'US' },
-    });
+    const response = await axios.get(
+      `https://api.spotify.com/v1/tracks/${id}?market=US`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
 
     res.status(200).json({ success: true, track: mapTrack(response.data) });
   } catch (error) {
-    console.error('Error en getTrackById:', error.response?.data || error.message);
+    console.error('❌ Error en getTrackById:', JSON.stringify(error.response?.data, null, 2) || error.message);
     res.status(500).json({ success: false, message: 'Error al obtener la canción' });
   }
 };
