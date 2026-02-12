@@ -1,3 +1,4 @@
+//routes/spotify.js
 const express = require('express');
 const router = express.Router();
 const spotifyController = require('../controllers/spotifyController');
@@ -12,7 +13,6 @@ router.get('/search', spotifyController.searchTracks);
 // GET /api/spotify/featured
 router.get('/featured', spotifyController.getFeaturedTracks);
 
-// ✅ NUEVO: GET /api/spotify/with-preview?limit=20
 // Endpoint especial que SOLO devuelve canciones con preview disponible
 router.get('/with-preview', spotifyController.getTracksWithPreview);
 
