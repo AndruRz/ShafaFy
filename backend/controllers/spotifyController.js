@@ -1,7 +1,23 @@
 const axios = require('axios');
 
-// ─── Obtener Access Token de Spotify ─────────────────────────────────────────
+// ─── Caché simple en memoria ──────────────────────────────────────────────────
+const cache = {
+  token: null,
+  tokenExpiry: null,
+  featuredTracks: null,
+  featuredExpiry: null,
+};
+
+// ─── Obtener Access Token de Spotify (con caché) ──────────────────────────────
 const getSpotifyToken = async () => {
+  const now = Date.now();
+
+  // Si el token existe y todavía es válido (con 1 min de margen), reutilízalo
+  if (cache.token && cache.tokenExpiry && now < cache.tokenExpiry) {
+    console.log('🔑 Token desde caché');
+    return cache.token;
+  }
+
   const clientId = process.env.SPOTIFY_CLIENT_ID;
   const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
 
@@ -13,7 +29,7 @@ const getSpotifyToken = async () => {
 
   const response = await axios.post(
     'https://accounts.spotify.com/api/token',
-    new URLSearchParams({ grant_type: 'client_credentials' }).toString(),
+    'grant_type=client_credentials',
     {
       headers: {
         Authorization: `Basic ${credentials}`,
@@ -22,7 +38,12 @@ const getSpotifyToken = async () => {
     }
   );
 
-  return response.data.access_token;
+  // Guardamos el token con expiración (Spotify da 3600s, usamos 3500s por seguridad)
+  cache.token = response.data.access_token;
+  cache.tokenExpiry = now + (response.data.expires_in - 100) * 1000;
+  console.log('✅ Token nuevo obtenido y cacheado');
+
+  return cache.token;
 };
 
 // ─── Mapear track al formato que usa el frontend ──────────────────────────────
@@ -38,49 +59,61 @@ const mapTrack = (track) => ({
   popularity: track.popularity,
 });
 
-// ─── Construir URL manualmente para evitar problemas de serialización ─────────
-const buildSpotifySearchUrl = (params) => {
-  const url = new URL('https://api.spotify.com/v1/search');
-  Object.entries(params).forEach(([key, value]) => {
-    url.searchParams.append(key, String(value));
-  });
-  return url.toString();
-};
-
 // ─── GET /api/spotify/featured ────────────────────────────────────────────────
 exports.getFeaturedTracks = async (req, res) => {
   try {
+    const now = Date.now();
+
+    // Caché de 10 minutos para las canciones destacadas
+    if (cache.featuredTracks && cache.featuredExpiry && now < cache.featuredExpiry) {
+      console.log('🎵 Featured tracks desde caché');
+      return res.status(200).json({
+        success: true,
+        tracks: cache.featuredTracks,
+      });
+    }
+
     const token = await getSpotifyToken();
-    console.log('✅ Token obtenido correctamente');
 
-    // Construimos la URL manualmente para garantizar que limit sea un número válido
-    const searchUrl = buildSpotifySearchUrl({
-      q: 'pop hits',
-      type: 'track',
-      limit: 20,
-      market: 'US',
-    });
+    // Pequeña pausa para evitar rate limiting
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
-    console.log('🔗 URL de búsqueda:', searchUrl);
-
-    const response = await axios.get(searchUrl, {
+    const response = await axios.get('https://api.spotify.com/v1/search', {
       headers: { Authorization: `Bearer ${token}` },
+      params: {
+        q: 'pop hits',
+        type: 'track',
+        limit: 20,
+        market: 'US',
+      },
     });
 
     const allTracks = response.data.tracks.items.map(mapTrack);
-
     const withPreview = allTracks.filter((t) => t.previewUrl);
     const withoutPreview = allTracks.filter((t) => !t.previewUrl);
+    const tracks = [...withPreview, ...withoutPreview];
+
+    // Guardar en caché por 10 minutos
+    cache.featuredTracks = tracks;
+    cache.featuredExpiry = now + 10 * 60 * 1000;
 
     console.log(`✅ Featured: ${withPreview.length} con preview, ${withoutPreview.length} sin preview`);
 
-    res.status(200).json({
-      success: true,
-      tracks: [...withPreview, ...withoutPreview],
-    });
+    res.status(200).json({ success: true, tracks });
+
   } catch (error) {
     console.error('❌ Error en getFeaturedTracks:', JSON.stringify(error.response?.data, null, 2) || error.message);
     console.error('❌ Status HTTP:', error.response?.status);
+
+    // Si hay caché vieja, úsala antes de fallar
+    if (cache.featuredTracks) {
+      console.log('⚠️ Usando caché vieja por error de Spotify');
+      return res.status(200).json({
+        success: true,
+        tracks: cache.featuredTracks,
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Error al cargar canciones',
@@ -98,25 +131,22 @@ exports.searchTracks = async (req, res) => {
       return res.status(400).json({ success: false, message: 'El parámetro q es requerido' });
     }
 
-    // Validar y limpiar el límite
     const parsedLimit = parseInt(limit, 10);
     const safeLimit = !isNaN(parsedLimit) && parsedLimit >= 1 && parsedLimit <= 50 ? parsedLimit : 20;
 
     const token = await getSpotifyToken();
 
-    const searchUrl = buildSpotifySearchUrl({
-      q: q.trim(),
-      type: 'track',
-      limit: safeLimit,
-      market: 'US',
-    });
-
-    const response = await axios.get(searchUrl, {
+    const response = await axios.get('https://api.spotify.com/v1/search', {
       headers: { Authorization: `Bearer ${token}` },
+      params: {
+        q: q.trim(),
+        type: 'track',
+        limit: safeLimit,
+        market: 'US',
+      },
     });
 
     const allTracks = response.data.tracks.items.map(mapTrack);
-
     const withPreview = allTracks.filter((t) => t.previewUrl);
     const withoutPreview = allTracks.filter((t) => !t.previewUrl);
 
@@ -126,6 +156,7 @@ exports.searchTracks = async (req, res) => {
       success: true,
       tracks: [...withPreview, ...withoutPreview],
     });
+
   } catch (error) {
     console.error('❌ Error en searchTracks:', JSON.stringify(error.response?.data, null, 2) || error.message);
     res.status(500).json({
@@ -143,13 +174,15 @@ exports.getTrackById = async (req, res) => {
     const token = await getSpotifyToken();
 
     const response = await axios.get(
-      `https://api.spotify.com/v1/tracks/${id}?market=US`,
+      `https://api.spotify.com/v1/tracks/${id}`,
       {
         headers: { Authorization: `Bearer ${token}` },
+        params: { market: 'US' },
       }
     );
 
     res.status(200).json({ success: true, track: mapTrack(response.data) });
+
   } catch (error) {
     console.error('❌ Error en getTrackById:', JSON.stringify(error.response?.data, null, 2) || error.message);
     res.status(500).json({ success: false, message: 'Error al obtener la canción' });
