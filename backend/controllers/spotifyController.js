@@ -78,26 +78,50 @@ exports.getFeaturedTracks = async (req, res) => {
     // Pequeña pausa para evitar rate limiting
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    const response = await axios.get('https://api.spotify.com/v1/search', {
-      headers: { Authorization: `Bearer ${token}` },
-      params: {
-        q: 'pop hits',
-        type: 'track',
-        limit: 20,
-        market: 'US',
-      },
-    });
+    // ⚠️ SOLUCIÓN: Usar múltiples búsquedas con límites más pequeños
+    // El endpoint de search tiene límites específicos por tipo de contenido
+    const searchQueries = ['pop hits 2024', 'top songs', 'viral hits'];
+    let allTracks = [];
 
-    const allTracks = response.data.tracks.items.map(mapTrack);
-    const withPreview = allTracks.filter((t) => t.previewUrl);
-    const withoutPreview = allTracks.filter((t) => !t.previewUrl);
-    const tracks = [...withPreview, ...withoutPreview];
+    for (const query of searchQueries) {
+      try {
+        const response = await axios.get('https://api.spotify.com/v1/search', {
+          headers: { Authorization: `Bearer ${token}` },
+          params: {
+            q: query,
+            type: 'track',
+            limit: 10, // ✅ Límite más bajo y seguro (10 en lugar de 20)
+            market: 'US',
+          },
+        });
+
+        allTracks = allTracks.concat(response.data.tracks.items);
+        
+        // Pausa entre peticiones para evitar rate limiting
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      } catch (searchError) {
+        console.warn(`⚠️ Error en búsqueda "${query}":`, searchError.message);
+      }
+    }
+
+    // Eliminar duplicados por ID
+    const uniqueTracks = Array.from(
+      new Map(allTracks.map(track => [track.id, track])).values()
+    );
+
+    const mappedTracks = uniqueTracks.map(mapTrack);
+    const withPreview = mappedTracks.filter((t) => t.previewUrl);
+    const withoutPreview = mappedTracks.filter((t) => !t.previewUrl);
+    
+    // Priorizar canciones con preview y limitar a 20
+    const tracks = [...withPreview, ...withoutPreview].slice(0, 20);
 
     // Guardar en caché por 10 minutos
     cache.featuredTracks = tracks;
     cache.featuredExpiry = now + 10 * 60 * 1000;
 
     console.log(`✅ Featured: ${withPreview.length} con preview, ${withoutPreview.length} sin preview`);
+    console.log(`📊 Total de canciones: ${tracks.length}`);
 
     res.status(200).json({ success: true, tracks });
 
@@ -132,7 +156,8 @@ exports.searchTracks = async (req, res) => {
     }
 
     const parsedLimit = parseInt(limit, 10);
-    const safeLimit = !isNaN(parsedLimit) && parsedLimit >= 1 && parsedLimit <= 50 ? parsedLimit : 20;
+    // ✅ SOLUCIÓN: Limitar el máximo a 10 para evitar errores
+    const safeLimit = !isNaN(parsedLimit) && parsedLimit >= 1 && parsedLimit <= 10 ? parsedLimit : 10;
 
     const token = await getSpotifyToken();
 

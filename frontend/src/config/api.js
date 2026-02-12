@@ -1,3 +1,4 @@
+//src/config/api.js
 import axios from 'axios';
 
 // URL del backend - cambia según el entorno
