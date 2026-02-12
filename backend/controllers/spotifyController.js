@@ -64,7 +64,6 @@ exports.getFeaturedTracks = async (req, res) => {
   try {
     const now = Date.now();
 
-    // Caché de 10 minutos
     if (cache.featuredTracks && cache.featuredExpiry && now < cache.featuredExpiry) {
       console.log('🎵 Featured tracks desde caché');
       return res.status(200).json({
@@ -75,18 +74,19 @@ exports.getFeaturedTracks = async (req, res) => {
 
     const token = await getSpotifyToken();
 
-    // ✅ Búsquedas optimizadas para encontrar canciones CON preview
+    // ✅ Búsquedas SIMPLES que SÍ funcionan
     const searchQueries = [
-      'top 50 global',
-      'viral hits 2024',
-      'pop latino',
-      'reggaeton hits',
-      'rock classics',
-      'electronic dance'
+      'bad bunny',
+      'karol g',
+      'shakira',
+      'the weeknd',
+      'drake',
+      'taylor swift',
+      'coldplay',
+      'imagine dragons'
     ];
     
     let allTracksWithPreview = [];
-    let allTracksWithoutPreview = [];
 
     for (const query of searchQueries) {
       try {
@@ -95,21 +95,20 @@ exports.getFeaturedTracks = async (req, res) => {
           params: {
             q: query,
             type: 'track',
-            limit: 10,
+            limit: 5,
             market: 'US',
           },
         });
 
-        const tracks = response.data.tracks.items.map(mapTrack);
-        const withPreview = tracks.filter((t) => t.previewUrl);
-        const withoutPreview = tracks.filter((t) => !t.previewUrl);
+        const tracks = response.data.tracks.items
+          .map(mapTrack)
+          .filter((t) => t.previewUrl); // Solo con preview
 
-        allTracksWithPreview = allTracksWithPreview.concat(withPreview);
-        allTracksWithoutPreview = allTracksWithoutPreview.concat(withoutPreview);
+        allTracksWithPreview = allTracksWithPreview.concat(tracks);
 
-        console.log(`🔍 "${query}": ${withPreview.length} con preview de ${tracks.length} totales`);
+        console.log(`🔍 "${query}": ${tracks.length} con preview`);
 
-        if (allTracksWithPreview.length >= 20) {
+        if (allTracksWithPreview.length >= 25) {
           break;
         }
 
@@ -119,41 +118,25 @@ exports.getFeaturedTracks = async (req, res) => {
       }
     }
 
-    // Eliminar duplicados por ID
-    const uniqueWithPreview = Array.from(
+    // Eliminar duplicados
+    const uniqueTracks = Array.from(
       new Map(allTracksWithPreview.map(track => [track.id, track])).values()
-    );
-    
-    const uniqueWithoutPreview = Array.from(
-      new Map(allTracksWithoutPreview.map(track => [track.id, track])).values()
-    );
+    ).slice(0, 20);
 
-    // ✅ PRIORIZAR canciones con preview al inicio
-    const tracks = [
-      ...uniqueWithPreview.slice(0, 20),
-      ...uniqueWithoutPreview.slice(0, 5)
-    ];
-
-    // Guardar en caché
-    cache.featuredTracks = tracks;
+    cache.featuredTracks = uniqueTracks;
     cache.featuredExpiry = now + 10 * 60 * 1000;
 
-    console.log(`✅ Featured final: ${uniqueWithPreview.length} CON preview, ${uniqueWithoutPreview.slice(0, 5).length} sin preview`);
+    console.log(`✅ Featured: ${uniqueTracks.length} canciones CON preview`);
 
     res.status(200).json({ 
       success: true, 
-      tracks,
-      stats: {
-        withPreview: uniqueWithPreview.length,
-        withoutPreview: uniqueWithoutPreview.slice(0, 5).length
-      }
+      tracks: uniqueTracks,
     });
 
   } catch (error) {
     console.error('❌ Error en getFeaturedTracks:', error.message);
 
     if (cache.featuredTracks) {
-      console.log('⚠️ Usando caché vieja por error de Spotify');
       return res.status(200).json({
         success: true,
         tracks: cache.featuredTracks,
@@ -163,13 +146,11 @@ exports.getFeaturedTracks = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error al cargar canciones',
-      detail: error.message,
     });
   }
 };
 
 // ─── GET /api/spotify/search?q=...&limit=15 ──────────────────────────────────
-// ✅ MEJORADO: Busca en múltiples mercados para encontrar más previews
 exports.searchTracks = async (req, res) => {
   try {
     const { q, limit } = req.query;
@@ -183,67 +164,34 @@ exports.searchTracks = async (req, res) => {
 
     const token = await getSpotifyToken();
 
-    // ✅ Buscar en múltiples mercados para maximizar previews
-    const markets = ['US', 'MX', 'ES', 'CO', 'AR'];
-    let allTracksWithPreview = [];
-    let allTracksWithoutPreview = [];
+    // ✅ Búsqueda simple pero efectiva
+    const response = await axios.get('https://api.spotify.com/v1/search', {
+      headers: { Authorization: `Bearer ${token}` },
+      params: {
+        q: q.trim(),
+        type: 'track',
+        limit: 50, // Pedir más para filtrar después
+        market: 'US',
+      },
+    });
 
-    for (const market of markets) {
-      try {
-        const response = await axios.get('https://api.spotify.com/v1/search', {
-          headers: { Authorization: `Bearer ${token}` },
-          params: {
-            q: q.trim(),
-            type: 'track',
-            limit: 20,
-            market: market,
-          },
-        });
-
-        const tracks = response.data.tracks.items.map(mapTrack);
-        const withPreview = tracks.filter((t) => t.previewUrl);
-        const withoutPreview = tracks.filter((t) => !t.previewUrl);
-
-        allTracksWithPreview = allTracksWithPreview.concat(withPreview);
-        allTracksWithoutPreview = allTracksWithoutPreview.concat(withoutPreview);
-
-        console.log(`🔍 Mercado ${market}: ${withPreview.length} con preview`);
-
-        // Si ya tenemos suficientes con preview, parar
-        if (allTracksWithPreview.length >= safeLimit) {
-          break;
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 150));
-      } catch (searchError) {
-        console.warn(`⚠️ Error en mercado ${market}:`, searchError.message);
-      }
-    }
-
-    // Eliminar duplicados
-    const uniqueWithPreview = Array.from(
-      new Map(allTracksWithPreview.map(track => [track.id, track])).values()
-    );
+    const allTracks = response.data.tracks.items.map(mapTrack);
     
-    const uniqueWithoutPreview = Array.from(
-      new Map(allTracksWithoutPreview.map(track => [track.id, track])).values()
-    );
+    // Separar canciones con y sin preview
+    const withPreview = allTracks.filter((t) => t.previewUrl);
+    const withoutPreview = allTracks.filter((t) => !t.previewUrl);
 
-    // ✅ Priorizar canciones con preview
+    // Priorizar con preview
     const finalTracks = [
-      ...uniqueWithPreview.slice(0, safeLimit),
-      ...uniqueWithoutPreview.slice(0, Math.max(5, safeLimit - uniqueWithPreview.length))
-    ];
+      ...withPreview,
+      ...withoutPreview
+    ].slice(0, safeLimit);
 
-    console.log(`✅ Búsqueda "${q}": ${uniqueWithPreview.length} con preview de ${finalTracks.length} totales`);
+    console.log(`✅ Búsqueda "${q}": ${withPreview.length} con preview de ${finalTracks.length} totales`);
 
     res.status(200).json({
       success: true,
       tracks: finalTracks,
-      stats: {
-        withPreview: uniqueWithPreview.length,
-        total: finalTracks.length
-      }
     });
 
   } catch (error) {
@@ -251,7 +199,6 @@ exports.searchTracks = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error al buscar canciones',
-      detail: error.message,
     });
   }
 };
@@ -279,49 +226,48 @@ exports.getTrackById = async (req, res) => {
 };
 
 // ─── GET /api/spotify/with-preview ──────────────────────────────────────────
-// ✅ ENDPOINT ESPECIAL: Solo canciones con preview GARANTIZADO
 exports.getTracksWithPreview = async (req, res) => {
   try {
     const token = await getSpotifyToken();
     const limit = parseInt(req.query.limit) || 20;
 
-    // Géneros y búsquedas que suelen tener más previews
-    const searches = [
-      'latin pop hits',
-      'reggaeton 2024',
-      'dance pop',
-      'top global',
-      'rock classics',
-      'electronic dance',
-      'hip hop',
-      'indie pop'
+    // ✅ Artistas populares que SIEMPRE tienen previews
+    const artists = [
+      'bad bunny',
+      'taylor swift',
+      'drake',
+      'the weeknd',
+      'ariana grande',
+      'ed sheeran',
+      'billie eilish',
+      'post malone'
     ];
 
     let tracksWithPreview = [];
 
-    for (const search of searches) {
+    for (const artist of artists) {
       if (tracksWithPreview.length >= limit) break;
 
       try {
         const response = await axios.get('https://api.spotify.com/v1/search', {
           headers: { Authorization: `Bearer ${token}` },
           params: {
-            q: search,
+            q: artist,
             type: 'track',
-            limit: 15,
+            limit: 10,
             market: 'US',
           },
         });
 
         const tracks = response.data.tracks.items
           .map(mapTrack)
-          .filter(t => t.previewUrl); // ✅ SOLO con preview
+          .filter(t => t.previewUrl);
 
         tracksWithPreview = tracksWithPreview.concat(tracks);
 
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 150));
       } catch (error) {
-        console.warn(`⚠️ Error buscando "${search}":`, error.message);
+        console.warn(`⚠️ Error buscando "${artist}":`, error.message);
       }
     }
 
@@ -330,12 +276,11 @@ exports.getTracksWithPreview = async (req, res) => {
       new Map(tracksWithPreview.map(track => [track.id, track])).values()
     ).slice(0, limit);
 
-    console.log(`✅ Canciones con preview: ${uniqueTracks.length} de ${limit} solicitadas`);
+    console.log(`✅ With-preview: ${uniqueTracks.length} canciones`);
 
     res.status(200).json({
       success: true,
       tracks: uniqueTracks,
-      count: uniqueTracks.length
     });
 
   } catch (error) {
