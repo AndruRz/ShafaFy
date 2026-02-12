@@ -1,21 +1,8 @@
-//src/services/spotifyService.js
 import api from '../config/api';
 
 const spotifyService = {
-  // ✅ MODIFICADO: Ahora usa el endpoint que SOLO devuelve canciones con preview
-  getFeatured: async () => {
-    try {
-      const response = await api.get('/spotify/with-preview', {
-        params: { limit: 20 }
-      });
-      return response.data.tracks;
-    } catch (error) {
-      throw error.response?.data || { message: 'Error al cargar canciones' };
-    }
-  },
-
-  // ✅ MODIFICADO: Búsqueda que prioriza canciones con preview
-  search: async (query, limit = 15) => {
+  // Buscar canciones por texto
+  search: async (query, limit = 20) => {
     try {
       const response = await api.get('/spotify/search', {
         params: { q: query, limit },
@@ -23,6 +10,16 @@ const spotifyService = {
       return response.data.tracks;
     } catch (error) {
       throw error.response?.data || { message: 'Error al buscar canciones' };
+    }
+  },
+
+  // Obtener canciones destacadas (inicio)
+  getFeatured: async () => {
+    try {
+      const response = await api.get('/spotify/featured');
+      return response.data.tracks;
+    } catch (error) {
+      throw error.response?.data || { message: 'Error al cargar canciones' };
     }
   },
 
