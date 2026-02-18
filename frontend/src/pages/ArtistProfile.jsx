@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import spotifyService from '../services/spotifyService';
 import './ArtistProfile.css';
 
@@ -6,7 +6,8 @@ function ArtistProfile({ artistId, onClose, onPlayTrack, onTracksLoaded, current
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState('tracks'); // 'tracks' | 'albums'
+  const [activeTab, setActiveTab] = useState('tracks');
+  const containerRef = useRef(null);
 
   useEffect(() => {
     if (!artistId) return;
@@ -19,6 +20,10 @@ function ArtistProfile({ artistId, onClose, onPlayTrack, onTracksLoaded, current
       setError('');
       const data = await spotifyService.getArtistProfile(artistId);
       setProfileData(data);
+      // Scroll al inicio del perfil
+      if (containerRef.current) {
+        containerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
       // Notificar al padre para que use estas canciones en next/prev
       if (onTracksLoaded && data.topTracks) {
         onTracksLoaded(data.topTracks);
@@ -63,7 +68,7 @@ function ArtistProfile({ artistId, onClose, onPlayTrack, onTracksLoaded, current
   const { artist, topTracks, albums } = profileData;
 
   return (
-    <div className="artist-profile">
+    <div className="artist-profile" ref={containerRef}>
 
       {/* ─── Botón volver ─────────────────────────────────────────────────── */}
       <button className="artist-back-btn" onClick={onClose}>
@@ -103,7 +108,7 @@ function ArtistProfile({ artistId, onClose, onPlayTrack, onTracksLoaded, current
                 <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                   <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
                 </svg>
-                0 canciones favoritas
+                {topTracks.length} canciones disponibles
               </span>
             </div>
             {artist.genres.length > 0 && (

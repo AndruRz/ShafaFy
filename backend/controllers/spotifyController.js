@@ -425,16 +425,18 @@ exports.getArtistProfile = async (req, res) => {
           const res = await axios.get('https://api.spotify.com/v1/search', {
             headers,
             params: {
-              q: artist.name,
+              q: `artist:"${artist.name}"`,
               type: 'track',
-              limit: 20,
+              limit: 50,
               market: 'US',
               offset,
             },
           });
-          // Sin filtro — tomamos todos los resultados de la búsqueda
-          // YouTube se encarga de reproducir la canción correcta
-          topTracks = topTracks.concat(res.data.tracks.items.map(mapTrack));
+          // Filtrar: solo canciones donde el artista buscado aparece en la lista de artistas
+          const filtered = res.data.tracks.items.filter((t) =>
+            t.artists.some((a) => a.id === id)
+          );
+          topTracks = topTracks.concat(filtered.map(mapTrack));
           await new Promise((r) => setTimeout(r, 150));
         } catch (_) {}
       }

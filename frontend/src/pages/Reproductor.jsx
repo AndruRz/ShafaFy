@@ -36,6 +36,12 @@ function Reproductor() {
   const tracksRef = useRef([]);
   const artistTracksRef = useRef([]);
   const currentTrackRef = useRef(null);
+  const resultsRef = useRef(null);
+
+  const handleArtistTracksLoaded = (loadedTracks) => {
+    setArtistTracks(loadedTracks);
+    setTopArtist((prev) => prev ? { ...prev, totalTracks: loadedTracks.length } : prev);
+  };
 
   useEffect(() => { tracksRef.current = tracks; }, [tracks]);
   useEffect(() => { artistTracksRef.current = artistTracks; }, [artistTracks]);
@@ -118,6 +124,10 @@ function Reproductor() {
         ]);
 
         setTracks(trackResults);
+        // Scroll al inicio de resultados
+        if (resultsRef.current) {
+          resultsRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        }
         // Mostrar el artista más relevante si su nombre coincide razonablemente
         if (artistResults && artistResults.length > 0) {
           const top = artistResults[0];
@@ -361,7 +371,7 @@ function Reproductor() {
       </header>
 
       {/* ─── Contenido central ─────────────────────────────────────────────────── */}
-      <main className="reproductor-content">
+      <main className="reproductor-content" ref={resultsRef}>
 
         {/* ── Vista perfil de artista ── */}
         {selectedArtist ? (
@@ -369,7 +379,7 @@ function Reproductor() {
             artistId={selectedArtist}
             onClose={() => { setSelectedArtist(null); setArtistTracks([]); }}
             onPlayTrack={playTrack}
-            onTracksLoaded={setArtistTracks}
+            onTracksLoaded={handleArtistTracksLoaded}
             currentTrack={currentTrack}
             isPlaying={isPlaying}
             youtubeLoading={youtubeLoading}
@@ -430,7 +440,7 @@ function Reproductor() {
                         <p className="artist-result-genre">{topArtist.genres.slice(0, 2).join(', ')}</p>
                       )}
                       <p className="artist-result-followers">
-                        {spotifyService.formatFollowers(topArtist.followers)} seguidores
+                        {topArtist.totalTracks ?? '—'} canciones disponibles
                       </p>
                     </div>
                     <div className="artist-result-action">
