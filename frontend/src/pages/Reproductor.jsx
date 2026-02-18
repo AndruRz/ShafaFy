@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import spotifyService from '../services/spotifyService';
@@ -8,12 +8,9 @@ function Reproductor() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // ─── Estado de usuario ──────────────────────────────────────────────────────
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showWelcome, setShowWelcome] = useState(false);
-
-  // ─── Estado del reproductor ─────────────────────────────────────────────────
   const [tracks, setTracks] = useState([]);
   const [tracksLoading, setTracksLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -21,29 +18,41 @@ function Reproductor() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(0.8);
+  const [volume, setVolume] = useState(80);
   const [error, setError] = useState('');
+  const [youtubeLoading, setYoutubeLoading] = useState(false);
 
-  const audioRef = useRef(null);
+  const ytPlayerRef = useRef(null);
+  const ytContainerRef = useRef(null);
+  const ytReadyRef = useRef(false);
+  const progressInterval = useRef(null);
   const searchTimeout = useRef(null);
+  const tracksRef = useRef([]);
+  const currentTrackRef = useRef(null);
 
-  // ─── Verificar autenticación y cargar canciones ─────────────────────────────
+  useEffect(() => { tracksRef.current = tracks; }, [tracks]);
+  useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
+
+  // Cargar YouTube IFrame API
+  useEffect(() => {
+    if (window.YT && window.YT.Player) { ytReadyRef.current = true; return; }
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+    window.onYouTubeIframeAPIReady = () => { ytReadyRef.current = true; };
+    return () => { window.onYouTubeIframeAPIReady = null; };
+  }, []);
+
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const userData = await authService.verifyAuth();
-        if (!userData) {
-          navigate('/auth');
-          return;
-        }
+        if (!userData) { navigate('/auth'); return; }
         setUser(userData);
-
         if (location.state?.isFirstLogin) {
           setShowWelcome(true);
           setTimeout(() => setShowWelcome(false), 5000);
         }
-
-        // Cargar canciones destacadas al inicio
         await loadFeaturedTracks();
         setLoading(false);
       } catch (error) {
@@ -51,11 +60,16 @@ function Reproductor() {
         navigate('/auth');
       }
     };
-
     checkAuth();
   }, [navigate, location]);
 
-  // ─── Cargar canciones destacadas ────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      clearInterval(progressInterval.current);
+      if (ytPlayerRef.current) { try { ytPlayerRef.current.destroy(); } catch (_) {} }
+    };
+  }, []);
+
   const loadFeaturedTracks = async () => {
     try {
       setTracksLoading(true);
@@ -69,18 +83,11 @@ function Reproductor() {
     }
   };
 
-  // ─── Buscar canciones con debounce ───────────────────────────────────────────
   const handleSearch = (e) => {
     const value = e.target.value;
     setSearchQuery(value);
-
     clearTimeout(searchTimeout.current);
-
-    if (value.trim() === '') {
-      loadFeaturedTracks();
-      return;
-    }
-
+    if (value.trim() === '') { loadFeaturedTracks(); return; }
     searchTimeout.current = setTimeout(async () => {
       try {
         setTracksLoading(true);
@@ -95,116 +102,157 @@ function Reproductor() {
     }, 500);
   };
 
-  // ─── Reproducir una canción ──────────────────────────────────────────────────
-  const playTrack = (track) => {
-    if (!track.previewUrl) {
-      // Solo mostrar mensaje, NO abrir Spotify
-      setError(`"${track.name}" no tiene preview disponible en esta canción.`);
-      setTimeout(() => setError(''), 3000);
+  const startProgressTracking = () => {
+    clearInterval(progressInterval.current);
+    progressInterval.current = setInterval(() => {
+      if (ytPlayerRef.current && ytReadyRef.current) {
+        try {
+          const t = ytPlayerRef.current.getCurrentTime?.() || 0;
+          const d = ytPlayerRef.current.getDuration?.() || 0;
+          setCurrentTime(t);
+          if (d > 0) setDuration(d);
+        } catch (_) {}
+      }
+    }, 500);
+  };
+
+  const loadYoutubePlayer = (videoId, track) => {
+    return new Promise((resolve) => {
+      if (ytPlayerRef.current) {
+        try { ytPlayerRef.current.destroy(); } catch (_) {}
+        ytPlayerRef.current = null;
+      }
+      if (ytContainerRef.current) {
+        ytContainerRef.current.innerHTML = '';
+        const div = document.createElement('div');
+        div.id = 'yt-player-inner';
+        ytContainerRef.current.appendChild(div);
+      }
+
+      const waitForYT = () => {
+        if (!window.YT || !window.YT.Player) { setTimeout(waitForYT, 200); return; }
+        const vol = volume;
+        ytPlayerRef.current = new window.YT.Player('yt-player-inner', {
+          height: '0', width: '0', videoId,
+          playerVars: { autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1, rel: 0, fs: 0 },
+          events: {
+            onReady: (event) => {
+              event.target.setVolume(vol);
+              event.target.playVideo();
+              setIsPlaying(true);
+              setCurrentTime(0);
+              startProgressTracking();
+              resolve();
+            },
+            onStateChange: (event) => {
+              const YTS = window.YT.PlayerState;
+              if (event.data === YTS.PLAYING) {
+                setIsPlaying(true);
+                startProgressTracking();
+              } else if (event.data === YTS.PAUSED) {
+                setIsPlaying(false);
+                clearInterval(progressInterval.current);
+              } else if (event.data === YTS.ENDED) {
+                setIsPlaying(false);
+                clearInterval(progressInterval.current);
+                const allTracks = tracksRef.current;
+                const ct = currentTrackRef.current;
+                if (!ct || allTracks.length === 0) return;
+                const idx = allTracks.findIndex((t) => t.id === ct.id);
+                const next = allTracks[(idx + 1) % allTracks.length];
+                if (next) playTrackById(next);
+              }
+            },
+            onError: () => {
+              setIsPlaying(false);
+              setYoutubeLoading(false);
+              setError('No se pudo reproducir. Intenta con otra canción.');
+              setTimeout(() => setError(''), 4000);
+              resolve();
+            },
+          },
+        });
+      };
+      waitForYT();
+    });
+  };
+
+  // Versión interna que no depende de closure de playTrack
+  const playTrackById = async (track) => {
+    if (currentTrackRef.current?.id === track.id) {
+      if (ytPlayerRef.current) {
+        try { ytPlayerRef.current.playVideo(); } catch (_) {}
+      }
       return;
     }
-
-    if (currentTrack?.id === track.id) {
-      togglePlay();
-      return;
-    }
-
     setCurrentTrack(track);
     setIsPlaying(false);
     setCurrentTime(0);
+    setDuration(0);
     setError('');
-
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = track.previewUrl;
-      audioRef.current.volume = volume;
-      audioRef.current.load(); // ← Importante: forzar carga antes de play
-
-      audioRef.current.addEventListener(
-        'canplay',
-        () => {
-          audioRef.current.play()
-            .then(() => setIsPlaying(true))
-            .catch((e) => {
-              console.error('Error al reproducir:', e);
-              setIsPlaying(false);
-            });
-        },
-        { once: true } // ← Solo escuchar una vez
-      );
+    setYoutubeLoading(true);
+    const videoId = await spotifyService.getYoutubeVideoId(track.name, track.artist);
+    if (!videoId) {
+      setYoutubeLoading(false);
+      setError(`No se encontró "${track.name}" en YouTube.`);
+      setTimeout(() => setError(''), 4000);
+      return;
     }
+    setYoutubeLoading(false);
+    await loadYoutubePlayer(videoId, track);
   };
 
-  // ─── Play / Pause ────────────────────────────────────────────────────────────
+  const playTrack = async (track) => {
+    if (currentTrack?.id === track.id) { togglePlay(); return; }
+    setCurrentTrack(track);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setError('');
+    setYoutubeLoading(true);
+    const videoId = await spotifyService.getYoutubeVideoId(track.name, track.artist);
+    if (!videoId) {
+      setYoutubeLoading(false);
+      setError(`No se encontró "${track.name}" en YouTube.`);
+      setTimeout(() => setError(''), 4000);
+      return;
+    }
+    setYoutubeLoading(false);
+    await loadYoutubePlayer(videoId, track);
+  };
+
   const togglePlay = () => {
-    if (!audioRef.current || !currentTrack) return;
-
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play().catch(() => setIsPlaying(false));
-    }
-    setIsPlaying(!isPlaying);
+    if (!ytPlayerRef.current || !currentTrack) return;
+    try {
+      if (isPlaying) { ytPlayerRef.current.pauseVideo(); }
+      else { ytPlayerRef.current.playVideo(); }
+    } catch (_) {}
   };
 
-  // ─── Siguiente / Anterior ─────────────────────────────────────────────────
   const playNext = () => {
     if (!currentTrack || tracks.length === 0) return;
     const idx = tracks.findIndex((t) => t.id === currentTrack.id);
-    const next = tracks[(idx + 1) % tracks.length];
-    playTrack(next);
+    playTrack(tracks[(idx + 1) % tracks.length]);
   };
 
   const playPrev = () => {
     if (!currentTrack || tracks.length === 0) return;
     const idx = tracks.findIndex((t) => t.id === currentTrack.id);
-    const prev = tracks[(idx - 1 + tracks.length) % tracks.length];
-    playTrack(prev);
+    playTrack(tracks[(idx - 1 + tracks.length) % tracks.length]);
   };
 
-  // ─── Eventos del audio ───────────────────────────────────────────────────────
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const onDurationChange = () => setDuration(audio.duration);
-    const onEnded = () => {
-      setIsPlaying(false);
-      // Usar tracks y currentTrack del closure actualizado
-      if (!currentTrack || tracks.length === 0) return;
-      const idx = tracks.findIndex((t) => t.id === currentTrack.id);
-      const next = tracks[(idx + 1) % tracks.length];
-      if (next) playTrack(next);
-    };
-
-    audio.addEventListener('timeupdate', onTimeUpdate);
-    audio.addEventListener('durationchange', onDurationChange);
-    audio.addEventListener('ended', onEnded);
-
-    return () => {
-      audio.removeEventListener('timeupdate', onTimeUpdate);
-      audio.removeEventListener('durationchange', onDurationChange);
-      audio.removeEventListener('ended', onEnded);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTrack, tracks]);
-
-  // ─── Cambiar tiempo de la canción ────────────────────────────────────────────
   const handleSeek = (e) => {
     const time = parseFloat(e.target.value);
     setCurrentTime(time);
-    if (audioRef.current) audioRef.current.currentTime = time;
+    if (ytPlayerRef.current) { try { ytPlayerRef.current.seekTo(time, true); } catch (_) {} }
   };
 
-  // ─── Cambiar volumen ──────────────────────────────────────────────────────────
   const handleVolume = (e) => {
-    const vol = parseFloat(e.target.value);
+    const vol = parseInt(e.target.value, 10);
     setVolume(vol);
-    if (audioRef.current) audioRef.current.volume = vol;
+    if (ytPlayerRef.current) { try { ytPlayerRef.current.setVolume(vol); } catch (_) {} }
   };
 
-  // ─── Formatear tiempo ─────────────────────────────────────────────────────────
   const formatTime = (seconds) => {
     if (!seconds || isNaN(seconds)) return '0:00';
     const m = Math.floor(seconds / 60);
@@ -213,12 +261,12 @@ function Reproductor() {
   };
 
   const handleLogout = async () => {
-    if (audioRef.current) audioRef.current.pause();
+    clearInterval(progressInterval.current);
+    if (ytPlayerRef.current) { try { ytPlayerRef.current.stopVideo(); } catch (_) {} }
     await authService.logout();
     navigate('/auth');
   };
 
-  // ─── Pantallas de carga y bienvenida (igual que antes) ───────────────────────
   if (loading) {
     return (
       <div className="reproductor-loading">
@@ -244,47 +292,15 @@ function Reproductor() {
           <div className="welcome-logo">
             <span className="logo-text">Shafa<span className="logo-accent">Fy</span></span>
           </div>
-          <h1 className="welcome-title">¡Bienvenido, {user?.fullName?.split(' ')[0]}! 🎉</h1>
-          <div className="welcome-benefits">
-            <div className="benefit-item">
-              <div className="benefit-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M9 18V5l12-2v13M9 18l-7 2V7l7-2M9 18l12-2M9 9l12-2"/>
-                </svg>
-              </div>
-              <div className="benefit-text">
-                <h3>Música ilimitada</h3>
-                <p>Accede a millones de canciones</p>
-              </div>
-            </div>
-            <div className="benefit-item">
-              <div className="benefit-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
-                </svg>
-              </div>
-              <div className="benefit-text">
-                <h3>Listas personalizadas</h3>
-                <p>Crea y comparte tus playlists</p>
-              </div>
-            </div>
-            <div className="benefit-item">
-              <div className="benefit-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="M12 6v6l4 2"/>
-                </svg>
-              </div>
-              <div className="benefit-text">
-                <h3>Sin anuncios</h3>
-                <p>Disfruta sin interrupciones</p>
-              </div>
-            </div>
+          <h1 className="welcome-title">Bienvenido a ShafaFy</h1>
+          <p className="welcome-subtitle">Tu música, sin límites</p>
+          <div className="welcome-features">
+            <div className="feature-item"><span className="feature-icon">🎵</span><h3>Millones de canciones</h3><p>Accede a todo el catálogo</p></div>
+            <div className="feature-item"><span className="feature-icon">🎧</span><h3>Alta calidad</h3><p>Sonido nítido siempre</p></div>
+            <div className="feature-item"><span className="feature-icon">🚫</span><h3>Sin anuncios</h3><p>Disfruta sin interrupciones</p></div>
           </div>
           <div className="welcome-loading">
-            <div className="loading-bar">
-              <div className="loading-progress"></div>
-            </div>
+            <div className="loading-bar"><div className="loading-progress"></div></div>
             <p>Preparando tu experiencia musical...</p>
           </div>
         </div>
@@ -292,32 +308,22 @@ function Reproductor() {
     );
   }
 
-  // ─── Pantalla principal ───────────────────────────────────────────────────────
   return (
     <div className="reproductor-page">
-      {/* Audio element oculto */}
-      <audio ref={audioRef} />
 
-      {/* Header */}
+      {/* Player de YouTube invisible — solo audio */}
+      <div ref={ytContainerRef} style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: 0, height: 0, overflow: 'hidden' }} />
+
       <header className="reproductor-header">
         <div className="header-logo">
           <span className="logo-text">Shafa<span className="logo-accent">Fy</span></span>
         </div>
-
-        {/* Barra de búsqueda */}
         <div className="search-bar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="m21 21-4.35-4.35"/>
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
           </svg>
-          <input
-            type="text"
-            placeholder="Buscar canciones, artistas..."
-            value={searchQuery}
-            onChange={handleSearch}
-          />
+          <input type="text" placeholder="Buscar canciones, artistas..." value={searchQuery} onChange={handleSearch} />
         </div>
-
         <div className="header-user">
           <div className="user-avatar">{user?.fullName?.charAt(0).toUpperCase()}</div>
           <span className="user-name">{user?.username}</span>
@@ -332,10 +338,8 @@ function Reproductor() {
         </div>
       </header>
 
-      {/* Contenido */}
       <main className="reproductor-content">
         <div className="content-container">
-          {/* Título de sección */}
           <div className="section-header">
             <h2>{searchQuery ? `Resultados: "${searchQuery}"` : '🔥 Canciones destacadas'}</h2>
             {!searchQuery && (
@@ -349,7 +353,6 @@ function Reproductor() {
             )}
           </div>
 
-          {/* Error */}
           {error && (
             <div className="error-message">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -361,16 +364,13 @@ function Reproductor() {
             </div>
           )}
 
-          {/* Lista de canciones */}
           {tracksLoading ? (
             <div className="tracks-loading">
-              {[...Array(8)].map((_, i) => (
-                <div key={i} className="track-skeleton" />
-              ))}
+              {[...Array(8)].map((_, i) => (<div key={i} className="track-skeleton" />))}
             </div>
           ) : (
             <div className="tracks-grid">
-              {tracks.map((track, index) => (
+              {tracks.map((track) => (
                 <div
                   key={track.id}
                   className={`track-card ${currentTrack?.id === track.id ? 'active' : ''}`}
@@ -387,30 +387,25 @@ function Reproductor() {
                       </div>
                     )}
                     <div className="track-overlay">
-                      {currentTrack?.id === track.id && isPlaying ? (
-                        <div className="playing-indicator">
-                          <span/><span/><span/>
-                        </div>
-                      ) : (
-                        <svg className="play-icon" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M8 5v14l11-7z"/>
+                      {currentTrack?.id === track.id && youtubeLoading ? (
+                        <svg viewBox="0 0 50 50" width="28" height="28">
+                          <circle cx="25" cy="25" r="18" fill="none" stroke="white" strokeWidth="4" strokeDasharray="80" strokeLinecap="round">
+                            <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="0.8s" repeatCount="indefinite"/>
+                          </circle>
                         </svg>
+                      ) : currentTrack?.id === track.id && isPlaying ? (
+                        <div className="playing-indicator"><span/><span/><span/></div>
+                      ) : (
+                        <svg className="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                       )}
                     </div>
                   </div>
-
                   <div className="track-info">
                     <p className="track-name">{track.name}</p>
                     <p className="track-artist">{track.artist}</p>
                     <p className="track-album">{track.album}</p>
-                    {!track.previewUrl && (
-                      <span className="no-preview">Sin preview</span>
-                    )}
                   </div>
-
-                  <div className="track-duration">
-                    {spotifyService.formatDuration(track.duration)}
-                  </div>
+                  <div className="track-duration">{spotifyService.formatDuration(track.duration)}</div>
                 </div>
               ))}
             </div>
@@ -419,8 +414,7 @@ function Reproductor() {
           {tracks.length === 0 && !tracksLoading && !error && (
             <div className="no-results">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8"/>
-                <path d="m21 21-4.35-4.35"/>
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
               </svg>
               <p>No se encontraron canciones para "{searchQuery}"</p>
             </div>
@@ -428,10 +422,8 @@ function Reproductor() {
         </div>
       </main>
 
-      {/* ─── Reproductor inferior ─────────────────────────────────────────────── */}
       {currentTrack && (
         <div className="player-bar">
-          {/* Info de la canción */}
           <div className="player-track-info">
             {currentTrack.albumImage && (
               <img src={currentTrack.albumImage} alt="cover" className="player-cover" />
@@ -442,54 +434,44 @@ function Reproductor() {
             </div>
           </div>
 
-          {/* Controles */}
           <div className="player-controls">
-            <button className="ctrl-btn" onClick={playPrev}>
+            <button className="ctrl-btn" onClick={playPrev} disabled={youtubeLoading}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
             </button>
 
-            <button className="ctrl-btn play-pause" onClick={togglePlay}>
-              {isPlaying ? (
+            <button className="ctrl-btn play-pause" onClick={togglePlay} disabled={youtubeLoading}>
+              {youtubeLoading ? (
+                <svg viewBox="0 0 50 50" width="22" height="22">
+                  <circle cx="25" cy="25" r="18" fill="none" stroke="currentColor" strokeWidth="5" strokeDasharray="80" strokeLinecap="round">
+                    <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="0.8s" repeatCount="indefinite"/>
+                  </circle>
+                </svg>
+              ) : isPlaying ? (
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
               ) : (
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
               )}
             </button>
 
-            <button className="ctrl-btn" onClick={playNext}>
+            <button className="ctrl-btn" onClick={playNext} disabled={youtubeLoading}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
             </button>
 
-            {/* Barra de progreso */}
             <div className="progress-section">
               <span className="time-label">{formatTime(currentTime)}</span>
               <input
-                type="range"
-                min="0"
-                max={duration || 30}
-                step="0.1"
-                value={currentTime}
-                onChange={handleSeek}
-                className="progress-bar"
+                type="range" min="0" max={duration || 100} step="1"
+                value={currentTime} onChange={handleSeek} className="progress-bar"
               />
-              <span className="time-label">{formatTime(duration || 30)}</span>
+              <span className="time-label">{formatTime(duration)}</span>
             </div>
           </div>
 
-          {/* Volumen */}
           <div className="player-volume">
             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
               <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
             </svg>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={volume}
-              onChange={handleVolume}
-              className="volume-bar"
-            />
+            <input type="range" min="0" max="100" step="5" value={volume} onChange={handleVolume} className="volume-bar" />
           </div>
         </div>
       )}

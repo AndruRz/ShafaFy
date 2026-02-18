@@ -1,7 +1,7 @@
 import api from '../config/api';
 
 const spotifyService = {
-  // Buscar canciones por texto
+  // Buscar canciones por texto (Spotify)
   search: async (query, limit = 20) => {
     try {
       const response = await api.get('/spotify/search', {
@@ -13,7 +13,7 @@ const spotifyService = {
     }
   },
 
-  // Obtener canciones destacadas (inicio)
+  // Obtener canciones destacadas
   getFeatured: async () => {
     try {
       const response = await api.get('/spotify/featured');
@@ -30,6 +30,20 @@ const spotifyService = {
       return response.data.track;
     } catch (error) {
       throw error.response?.data || { message: 'Error al cargar la canción' };
+    }
+  },
+
+  // ─── Buscar videoId en YouTube para reproducir ────────────────────────────
+  getYoutubeVideoId: async (trackName, artistName) => {
+    try {
+      const query = `${trackName} ${artistName}`;
+      const response = await api.get('/youtube/search', {
+        params: { q: query },
+      });
+      return response.data.videoId;
+    } catch (error) {
+      console.error('Error buscando en YouTube:', error);
+      return null;
     }
   },
 
