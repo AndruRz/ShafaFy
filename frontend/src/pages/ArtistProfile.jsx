@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import spotifyService from '../services/spotifyService';
 import './ArtistProfile.css';
 
-function ArtistProfile({ artistId, onClose, onPlayTrack, currentTrack, isPlaying }) {
+function ArtistProfile({ artistId, onClose, onPlayTrack, onTracksLoaded, currentTrack, isPlaying, youtubeLoading }) {
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -19,6 +19,10 @@ function ArtistProfile({ artistId, onClose, onPlayTrack, currentTrack, isPlaying
       setError('');
       const data = await spotifyService.getArtistProfile(artistId);
       setProfileData(data);
+      // Notificar al padre para que use estas canciones en next/prev
+      if (onTracksLoaded && data.topTracks) {
+        onTracksLoaded(data.topTracks);
+      }
     } catch (err) {
       setError('No se pudo cargar el perfil del artista.');
     } finally {
@@ -154,7 +158,13 @@ function ArtistProfile({ artistId, onClose, onPlayTrack, currentTrack, isPlaying
                     </div>
                   )}
                   <div className="track-overlay">
-                    {currentTrack?.id === track.id && isPlaying ? (
+                    {currentTrack?.id === track.id && youtubeLoading ? (
+                      <svg viewBox="0 0 50 50" width="28" height="28">
+                        <circle cx="25" cy="25" r="18" fill="none" stroke="white" strokeWidth="4" strokeDasharray="80" strokeLinecap="round">
+                          <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="0.8s" repeatCount="indefinite"/>
+                        </circle>
+                      </svg>
+                    ) : currentTrack?.id === track.id && isPlaying ? (
                       <div className="playing-indicator"><span/><span/><span/></div>
                     ) : (
                       <svg className="play-icon" viewBox="0 0 24 24" fill="currentColor">

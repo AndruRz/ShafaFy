@@ -26,6 +26,7 @@ function Reproductor() {
   // ─── Estado artista ─────────────────────────────────────────────────────────
   const [topArtist, setTopArtist] = useState(null);       // artista destacado en búsqueda
   const [selectedArtist, setSelectedArtist] = useState(null); // artista cuyo perfil se muestra
+  const [artistTracks, setArtistTracks] = useState([]);   // canciones del perfil del artista activo
 
   const ytPlayerRef = useRef(null);
   const ytContainerRef = useRef(null);
@@ -33,9 +34,11 @@ function Reproductor() {
   const progressInterval = useRef(null);
   const searchTimeout = useRef(null);
   const tracksRef = useRef([]);
+  const artistTracksRef = useRef([]);
   const currentTrackRef = useRef(null);
 
   useEffect(() => { tracksRef.current = tracks; }, [tracks]);
+  useEffect(() => { artistTracksRef.current = artistTracks; }, [artistTracks]);
   useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
 
   // Cargar YouTube IFrame API
@@ -97,6 +100,7 @@ function Reproductor() {
     if (value.trim() === '') {
       setTopArtist(null);
       setSelectedArtist(null);
+      setArtistTracks([]);
       loadFeaturedTracks();
       return;
     }
@@ -185,7 +189,7 @@ function Reproductor() {
               } else if (event.data === YTS.ENDED) {
                 setIsPlaying(false);
                 clearInterval(progressInterval.current);
-                const allTracks = tracksRef.current;
+                const allTracks = artistTracksRef.current.length > 0 ? artistTracksRef.current : tracksRef.current;
                 const ct = currentTrackRef.current;
                 if (!ct || allTracks.length === 0) return;
                 const idx = allTracks.findIndex((t) => t.id === ct.id);
@@ -238,15 +242,18 @@ function Reproductor() {
   };
 
   const playNext = () => {
-    if (!currentTrack || tracks.length === 0) return;
-    const idx = tracks.findIndex((t) => t.id === currentTrack.id);
-    playTrack(tracks[(idx + 1) % tracks.length]);
+    // Si hay canciones del artista activo, navegar por esa lista
+    const activeList = artistTracks.length > 0 ? artistTracks : tracks;
+    if (!currentTrack || activeList.length === 0) return;
+    const idx = activeList.findIndex((t) => t.id === currentTrack.id);
+    playTrack(activeList[(idx + 1) % activeList.length]);
   };
 
   const playPrev = () => {
-    if (!currentTrack || tracks.length === 0) return;
-    const idx = tracks.findIndex((t) => t.id === currentTrack.id);
-    playTrack(tracks[(idx - 1 + tracks.length) % tracks.length]);
+    const activeList = artistTracks.length > 0 ? artistTracks : tracks;
+    if (!currentTrack || activeList.length === 0) return;
+    const idx = activeList.findIndex((t) => t.id === currentTrack.id);
+    playTrack(activeList[(idx - 1 + activeList.length) % activeList.length]);
   };
 
   const handleSeek = (e) => {
@@ -360,10 +367,12 @@ function Reproductor() {
         {selectedArtist ? (
           <ArtistProfile
             artistId={selectedArtist}
-            onClose={() => setSelectedArtist(null)}
+            onClose={() => { setSelectedArtist(null); setArtistTracks([]); }}
             onPlayTrack={playTrack}
+            onTracksLoaded={setArtistTracks}
             currentTrack={currentTrack}
             isPlaying={isPlaying}
+            youtubeLoading={youtubeLoading}
           />
         ) : (
           <div className="content-container">

@@ -368,6 +368,8 @@ exports.searchArtist = async (req, res) => {
       return res.status(404).json({ success: false, message: 'No se encontraron artistas' });
     }
 
+    // El endpoint de search a veces devuelve followers=0
+    // Enriquecemos el top artista con datos reales del endpoint /artists/:id
     const mapped = artists.map((a) => ({
       id: a.id,
       name: a.name,
@@ -377,6 +379,21 @@ exports.searchArtist = async (req, res) => {
       popularity: a.popularity || 0,
       spotifyUrl: a.external_urls?.spotify || null,
     }));
+
+    // Enriquecer el primer artista con datos reales si followers es 0
+    if (mapped.length > 0 && mapped[0].followers === 0) {
+      try {
+        const fullArtist = await axios.get(
+          `https://api.spotify.com/v1/artists/${mapped[0].id}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        mapped[0].followers = fullArtist.data.followers?.total || 0;
+        mapped[0].popularity = fullArtist.data.popularity || 0;
+        if (!mapped[0].image && fullArtist.data.images?.[0]) {
+          mapped[0].image = fullArtist.data.images[0].url;
+        }
+      } catch (_) {}
+    }
 
     res.status(200).json({ success: true, artists: mapped });
   } catch (error) {
@@ -399,7 +416,7 @@ exports.getArtistProfile = async (req, res) => {
     const artistRes = await axios.get(`https://api.spotify.com/v1/artists/${id}`, { headers });
     const artist = artistRes.data;
 
-    // ── Top tracks (tolerante a 403) ─────────────────────────────────────────
+    // ── Top tracks + búsqueda extendida con filtro estricto por artista ───────
     let topTracks = [];
     try {
       const topTracksRes = await axios.get(
@@ -407,16 +424,43 @@ exports.getArtistProfile = async (req, res) => {
         { headers, params: { market: 'US' } }
       );
       topTracks = topTracksRes.data.tracks.map(mapTrack);
+      console.log(`✅ top-tracks: ${topTracks.length} para ${artist.name}`);
     } catch (e) {
-      console.warn(`⚠️ top-tracks no disponible para ${id}:`, e.response?.data?.error?.message || e.message);
-      // Fallback: buscar canciones del artista por nombre
-      try {
-        const fallback = await axios.get('https://api.spotify.com/v1/search', {
-          headers,
-          params: { q: `artist:${artist.name}`, type: 'track', limit: 10, market: 'US' },
-        });
-        topTracks = fallback.data.tracks.items.map(mapTrack);
-      } catch (_) {}
+      console.warn(`⚠️ top-tracks bloqueado para ${id}:`, e.response?.data?.error?.message || e.message);
+    }
+
+    // Búsqueda extendida con 3 páginas para traer más canciones
+    try {
+      const offsets = [0, 20, 40];
+      let extraTracks = [];
+      for (const offset of offsets) {
+        try {
+          const res = await axios.get('https://api.spotify.com/v1/search', {
+            headers,
+            params: {
+              q: `artist:"${artist.name}"`,
+              type: 'track',
+              limit: 20,
+              market: 'US',
+              offset,
+            },
+          });
+          // Filtro estricto: solo tracks donde el artista coincide por ID o nombre exacto
+          const filtered = res.data.tracks.items.filter((t) =>
+            t.artists.some(
+              (a) => a.id === id || a.name.toLowerCase() === artist.name.toLowerCase()
+            )
+          );
+          extraTracks = extraTracks.concat(filtered.map(mapTrack));
+          await new Promise((r) => setTimeout(r, 150));
+        } catch (_) {}
+      }
+      // Combinar top-tracks + extra, deduplicar
+      const combined = [...topTracks, ...extraTracks];
+      topTracks = Array.from(new Map(combined.map((t) => [t.id, t])).values());
+      console.log(`✅ Total canciones de ${artist.name}: ${topTracks.length}`);
+    } catch (e) {
+      console.warn(`⚠️ búsqueda extendida falló:`, e.message);
     }
 
     // ── Álbumes (tolerante a 403) ─────────────────────────────────────────────
