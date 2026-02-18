@@ -96,7 +96,7 @@ exports.getFeaturedTracks = async (req, res) => {
             q: query,
             type: 'track',
             limit: 10,
-            market: 'US',
+            market: 'JP', // ← JP y ES tienen mejor disponibilidad de previews
           },
         });
 
@@ -205,7 +205,7 @@ exports.searchTracks = async (req, res) => {
             q: search.q,
             type: 'track',
             limit: search.limit,
-            market: 'US',
+            market: 'JP',
           },
         });
 
@@ -268,7 +268,7 @@ exports.getTrackById = async (req, res) => {
       `https://api.spotify.com/v1/tracks/${id}`,
       {
         headers: { Authorization: `Bearer ${token}` },
-        params: { market: 'US' },
+        params: { market: 'JP' },
       }
     );
 
@@ -309,7 +309,7 @@ exports.getTracksWithPreview = async (req, res) => {
             q: `genre:${genre}`,
             type: 'track',
             limit: 10,
-            market: 'US',
+            market: 'JP',
           },
         });
 
