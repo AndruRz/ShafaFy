@@ -98,8 +98,9 @@ function Reproductor() {
   // ─── Reproducir una canción ──────────────────────────────────────────────────
   const playTrack = (track) => {
     if (!track.previewUrl) {
-      alert('Esta canción no tiene preview disponible. Ábrela en Spotify.');
-      window.open(track.spotifyUrl, '_blank');
+      // Solo mostrar mensaje, NO abrir Spotify
+      setError(`"${track.name}" no tiene preview disponible en esta canción.`);
+      setTimeout(() => setError(''), 3000);
       return;
     }
 
@@ -109,13 +110,28 @@ function Reproductor() {
     }
 
     setCurrentTrack(track);
-    setIsPlaying(true);
+    setIsPlaying(false);
     setCurrentTime(0);
+    setError('');
 
     if (audioRef.current) {
+      audioRef.current.pause();
       audioRef.current.src = track.previewUrl;
       audioRef.current.volume = volume;
-      audioRef.current.play().catch(() => setIsPlaying(false));
+      audioRef.current.load(); // ← Importante: forzar carga antes de play
+
+      audioRef.current.addEventListener(
+        'canplay',
+        () => {
+          audioRef.current.play()
+            .then(() => setIsPlaying(true))
+            .catch((e) => {
+              console.error('Error al reproducir:', e);
+              setIsPlaying(false);
+            });
+        },
+        { once: true } // ← Solo escuchar una vez
+      );
     }
   };
 
@@ -153,7 +169,14 @@ function Reproductor() {
 
     const onTimeUpdate = () => setCurrentTime(audio.currentTime);
     const onDurationChange = () => setDuration(audio.duration);
-    const onEnded = () => { setIsPlaying(false); playNext(); };
+    const onEnded = () => {
+      setIsPlaying(false);
+      // Usar tracks y currentTrack del closure actualizado
+      if (!currentTrack || tracks.length === 0) return;
+      const idx = tracks.findIndex((t) => t.id === currentTrack.id);
+      const next = tracks[(idx + 1) % tracks.length];
+      if (next) playTrack(next);
+    };
 
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('durationchange', onDurationChange);
@@ -164,6 +187,7 @@ function Reproductor() {
       audio.removeEventListener('durationchange', onDurationChange);
       audio.removeEventListener('ended', onEnded);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrack, tracks]);
 
   // ─── Cambiar tiempo de la canción ────────────────────────────────────────────
@@ -380,7 +404,7 @@ function Reproductor() {
                     <p className="track-artist">{track.artist}</p>
                     <p className="track-album">{track.album}</p>
                     {!track.previewUrl && (
-                      <span className="no-preview">Solo en Spotify</span>
+                      <span className="no-preview">Sin preview</span>
                     )}
                   </div>
 
