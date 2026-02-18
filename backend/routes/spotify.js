@@ -13,10 +13,17 @@ router.get('/search', spotifyController.searchTracks);
 // GET /api/spotify/featured
 router.get('/featured', spotifyController.getFeaturedTracks);
 
-// Endpoint especial que SOLO devuelve canciones con preview disponible
+// GET /api/spotify/with-preview
 router.get('/with-preview', spotifyController.getTracksWithPreview);
 
 // GET /api/spotify/track/:id
 router.get('/track/:id', spotifyController.getTrackById);
+
+// ─── Rutas de Artistas ────────────────────────────────────────────────────────
+// GET /api/spotify/artist/search?q=bad+bunny
+router.get('/artist/search', spotifyController.searchArtist);
+
+// GET /api/spotify/artist/:id
+router.get('/artist/:id', spotifyController.getArtistProfile);
 
 module.exports = router;

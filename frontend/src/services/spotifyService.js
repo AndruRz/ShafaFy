@@ -33,6 +33,29 @@ const spotifyService = {
     }
   },
 
+  // ─── Buscar artistas por nombre ───────────────────────────────────────────
+  searchArtists: async (query) => {
+    try {
+      const response = await api.get('/spotify/artist/search', {
+        params: { q: query },
+      });
+      return response.data.artists;
+    } catch (error) {
+      console.error('Error buscando artistas:', error);
+      return [];
+    }
+  },
+
+  // ─── Obtener perfil completo del artista ──────────────────────────────────
+  getArtistProfile: async (artistId) => {
+    try {
+      const response = await api.get(`/spotify/artist/${artistId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Error al cargar el artista' };
+    }
+  },
+
   // ─── Buscar videoId en YouTube para reproducir ────────────────────────────
   getYoutubeVideoId: async (trackName, artistName) => {
     try {
@@ -52,6 +75,13 @@ const spotifyService = {
     const minutes = Math.floor(ms / 60000);
     const seconds = Math.floor((ms % 60000) / 1000);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  },
+
+  // Formatear número de seguidores
+  formatFollowers: (num) => {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(0)}K`;
+    return num.toString();
   },
 };
 

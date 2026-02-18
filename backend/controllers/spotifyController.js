@@ -96,7 +96,7 @@ exports.getFeaturedTracks = async (req, res) => {
             q: query,
             type: 'track',
             limit: 10,
-            market: 'JP', // ← JP y ES tienen mejor disponibilidad de previews
+            market: 'US',
           },
         });
 
@@ -205,7 +205,7 @@ exports.searchTracks = async (req, res) => {
             q: search.q,
             type: 'track',
             limit: search.limit,
-            market: 'JP',
+            market: 'US',
           },
         });
 
@@ -268,7 +268,7 @@ exports.getTrackById = async (req, res) => {
       `https://api.spotify.com/v1/tracks/${id}`,
       {
         headers: { Authorization: `Bearer ${token}` },
-        params: { market: 'JP' },
+        params: { market: 'US' },
       }
     );
 
@@ -309,7 +309,7 @@ exports.getTracksWithPreview = async (req, res) => {
             q: `genre:${genre}`,
             type: 'track',
             limit: 10,
-            market: 'JP',
+            market: 'US',
           },
         });
 
@@ -344,5 +344,103 @@ exports.getTracksWithPreview = async (req, res) => {
       success: false,
       message: 'Error al cargar canciones con preview'
     });
+  }
+};// ─── AGREGAR ESTOS MÉTODOS AL FINAL DE spotifyController.js ──────────────────
+
+// ─── GET /api/spotify/artist/search?q=bad+bunny ───────────────────────────────
+// Busca artistas por nombre, devuelve el más relevante con info básica
+exports.searchArtist = async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.trim() === '') {
+      return res.status(400).json({ success: false, message: 'El parámetro q es requerido' });
+    }
+
+    const token = await getSpotifyToken();
+
+    const response = await axios.get('https://api.spotify.com/v1/search', {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { q: q.trim(), type: 'artist', limit: 5, market: 'US' },
+    });
+
+    const artists = response.data.artists.items;
+    if (!artists || artists.length === 0) {
+      return res.status(404).json({ success: false, message: 'No se encontraron artistas' });
+    }
+
+    const mapped = artists.map((a) => ({
+      id: a.id,
+      name: a.name,
+      image: a.images[0]?.url || null,
+      genres: a.genres || [],
+      followers: a.followers?.total || 0,
+      popularity: a.popularity || 0,
+      spotifyUrl: a.external_urls?.spotify || null,
+    }));
+
+    res.status(200).json({ success: true, artists: mapped });
+  } catch (error) {
+    console.error('❌ Error en searchArtist:', error.response?.data || error.message);
+    res.status(500).json({ success: false, message: 'Error al buscar artistas' });
+  }
+};
+
+// ─── GET /api/spotify/artist/:id ─────────────────────────────────────────────
+// Devuelve info completa del artista: datos, top tracks y álbumes
+exports.getArtistProfile = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const token = await getSpotifyToken();
+
+    // Peticiones en paralelo: info artista + top tracks + álbumes
+    const [artistRes, topTracksRes, albumsRes] = await Promise.all([
+      axios.get(`https://api.spotify.com/v1/artists/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      axios.get(`https://api.spotify.com/v1/artists/${id}/top-tracks`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { market: 'US' },
+      }),
+      axios.get(`https://api.spotify.com/v1/artists/${id}/albums`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { market: 'US', limit: 10, include_groups: 'album,single' },
+      }),
+    ]);
+
+    const artist = artistRes.data;
+    const topTracks = topTracksRes.data.tracks.map(mapTrack);
+    const albums = albumsRes.data.items.map((album) => ({
+      id: album.id,
+      name: album.name,
+      image: album.images[0]?.url || null,
+      releaseDate: album.release_date,
+      totalTracks: album.total_tracks,
+      type: album.album_type,
+      spotifyUrl: album.external_urls?.spotify || null,
+    }));
+
+    // Eliminar álbumes duplicados por nombre
+    const uniqueAlbums = Array.from(
+      new Map(albums.map((a) => [a.name.toLowerCase(), a])).values()
+    );
+
+    res.status(200).json({
+      success: true,
+      artist: {
+        id: artist.id,
+        name: artist.name,
+        image: artist.images[0]?.url || null,
+        imageMedium: artist.images[1]?.url || null,
+        genres: artist.genres || [],
+        followers: artist.followers?.total || 0,
+        popularity: artist.popularity || 0,
+        spotifyUrl: artist.external_urls?.spotify || null,
+      },
+      topTracks,
+      albums: uniqueAlbums,
+    });
+  } catch (error) {
+    console.error('❌ Error en getArtistProfile:', error.response?.data || error.message);
+    res.status(500).json({ success: false, message: 'Error al cargar perfil del artista' });
   }
 };
