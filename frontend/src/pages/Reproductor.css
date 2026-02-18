@@ -458,3 +458,105 @@
   .time-label { display: none; }
   .track-album { display: none; }
 }
+/* ================================
+   ARTIST RESULT CARD (en búsqueda)
+   ================================ */
+.artist-result-card {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, rgba(29,185,84,0.08), rgba(124,58,237,0.08));
+  border: 1px solid rgba(29,185,84,0.25);
+  border-radius: 16px;
+  cursor: pointer;
+  margin-bottom: 1.25rem;
+  transition: all 0.25s ease;
+}
+
+.artist-result-card:hover {
+  background: linear-gradient(135deg, rgba(29,185,84,0.15), rgba(124,58,237,0.15));
+  border-color: rgba(29,185,84,0.5);
+  transform: translateY(-1px);
+}
+
+.artist-result-img-wrap { flex-shrink: 0; }
+
+.artist-result-img {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(29,185,84,0.3);
+}
+
+.artist-result-img-placeholder {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: var(--color-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-dim);
+  border: 2px solid rgba(255,255,255,0.1);
+}
+
+.artist-result-img-placeholder svg { width: 32px; height: 32px; }
+
+.artist-result-info { flex: 1; min-width: 0; }
+
+.artist-result-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-primary);
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.artist-result-name {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artist-result-genre {
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
+  margin-top: 0.2rem;
+  text-transform: capitalize;
+}
+
+.artist-result-followers {
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
+  margin-top: 0.15rem;
+}
+
+.artist-result-action {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.artist-result-action svg { width: 16px; height: 16px; }
+
+.songs-section-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-dim);
+  margin-bottom: 0.75rem;
+}

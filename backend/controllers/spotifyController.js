@@ -387,42 +387,60 @@ exports.searchArtist = async (req, res) => {
 
 // ─── GET /api/spotify/artist/:id ─────────────────────────────────────────────
 // Devuelve info completa del artista: datos, top tracks y álbumes
+// Cada petición es independiente para tolerar 403 parciales de Spotify en modo dev
 exports.getArtistProfile = async (req, res) => {
   try {
     const { id } = req.params;
     const token = await getSpotifyToken();
 
-    // Peticiones en paralelo: info artista + top tracks + álbumes
-    const [artistRes, topTracksRes, albumsRes] = await Promise.all([
-      axios.get(`https://api.spotify.com/v1/artists/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-      axios.get(`https://api.spotify.com/v1/artists/${id}/top-tracks`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { market: 'US' },
-      }),
-      axios.get(`https://api.spotify.com/v1/artists/${id}/albums`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { market: 'US', limit: 10, include_groups: 'album,single' },
-      }),
-    ]);
+    const headers = { Authorization: `Bearer ${token}` };
 
+    // ── Info básica del artista ──────────────────────────────────────────────
+    const artistRes = await axios.get(`https://api.spotify.com/v1/artists/${id}`, { headers });
     const artist = artistRes.data;
-    const topTracks = topTracksRes.data.tracks.map(mapTrack);
-    const albums = albumsRes.data.items.map((album) => ({
-      id: album.id,
-      name: album.name,
-      image: album.images[0]?.url || null,
-      releaseDate: album.release_date,
-      totalTracks: album.total_tracks,
-      type: album.album_type,
-      spotifyUrl: album.external_urls?.spotify || null,
-    }));
 
-    // Eliminar álbumes duplicados por nombre
-    const uniqueAlbums = Array.from(
-      new Map(albums.map((a) => [a.name.toLowerCase(), a])).values()
-    );
+    // ── Top tracks (tolerante a 403) ─────────────────────────────────────────
+    let topTracks = [];
+    try {
+      const topTracksRes = await axios.get(
+        `https://api.spotify.com/v1/artists/${id}/top-tracks`,
+        { headers, params: { market: 'US' } }
+      );
+      topTracks = topTracksRes.data.tracks.map(mapTrack);
+    } catch (e) {
+      console.warn(`⚠️ top-tracks no disponible para ${id}:`, e.response?.data?.error?.message || e.message);
+      // Fallback: buscar canciones del artista por nombre
+      try {
+        const fallback = await axios.get('https://api.spotify.com/v1/search', {
+          headers,
+          params: { q: `artist:${artist.name}`, type: 'track', limit: 10, market: 'US' },
+        });
+        topTracks = fallback.data.tracks.items.map(mapTrack);
+      } catch (_) {}
+    }
+
+    // ── Álbumes (tolerante a 403) ─────────────────────────────────────────────
+    let uniqueAlbums = [];
+    try {
+      const albumsRes = await axios.get(
+        `https://api.spotify.com/v1/artists/${id}/albums`,
+        { headers, params: { market: 'US', limit: 10, include_groups: 'album,single' } }
+      );
+      const albums = albumsRes.data.items.map((album) => ({
+        id: album.id,
+        name: album.name,
+        image: album.images[0]?.url || null,
+        releaseDate: album.release_date,
+        totalTracks: album.total_tracks,
+        type: album.album_type,
+        spotifyUrl: album.external_urls?.spotify || null,
+      }));
+      uniqueAlbums = Array.from(
+        new Map(albums.map((a) => [a.name.toLowerCase(), a])).values()
+      );
+    } catch (e) {
+      console.warn(`⚠️ albums no disponible para ${id}:`, e.response?.data?.error?.message || e.message);
+    }
 
     res.status(200).json({
       success: true,
