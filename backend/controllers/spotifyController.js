@@ -416,51 +416,40 @@ exports.getArtistProfile = async (req, res) => {
     const artistRes = await axios.get(`https://api.spotify.com/v1/artists/${id}`, { headers });
     const artist = artistRes.data;
 
-    // ── Top tracks + búsqueda extendida con filtro estricto por artista ───────
+    // ── Canciones del artista via búsqueda (no usa top-tracks que da 403) ──────
+    // Spotify en modo dev bloquea /top-tracks, usamos search que sí funciona
     let topTracks = [];
     try {
-      const topTracksRes = await axios.get(
-        `https://api.spotify.com/v1/artists/${id}/top-tracks`,
-        { headers, params: { market: 'US' } }
-      );
-      topTracks = topTracksRes.data.tracks.map(mapTrack);
-      console.log(`✅ top-tracks: ${topTracks.length} para ${artist.name}`);
-    } catch (e) {
-      console.warn(`⚠️ top-tracks bloqueado para ${id}:`, e.response?.data?.error?.message || e.message);
-    }
-
-    // Búsqueda extendida con 3 páginas para traer más canciones
-    try {
+      // 3 búsquedas paginadas para traer hasta ~60 canciones
       const offsets = [0, 20, 40];
-      let extraTracks = [];
       for (const offset of offsets) {
         try {
           const res = await axios.get('https://api.spotify.com/v1/search', {
             headers,
             params: {
-              q: `artist:"${artist.name}"`,
+              q: artist.name,   // búsqueda simple por nombre, sin filtro rígido
               type: 'track',
               limit: 20,
               market: 'US',
               offset,
             },
           });
-          // Filtro estricto: solo tracks donde el artista coincide por ID o nombre exacto
+          // Filtro flexible: incluir si el artista aparece en cualquier posición
+          // (acepta colaboraciones y features, pero descarta artistas completamente distintos)
+          const artistNameLower = artist.name.toLowerCase();
           const filtered = res.data.tracks.items.filter((t) =>
-            t.artists.some(
-              (a) => a.id === id || a.name.toLowerCase() === artist.name.toLowerCase()
-            )
+            t.artists.some((a) => a.name.toLowerCase().includes(artistNameLower) ||
+                                   artistNameLower.includes(a.name.toLowerCase()))
           );
-          extraTracks = extraTracks.concat(filtered.map(mapTrack));
+          topTracks = topTracks.concat(filtered.map(mapTrack));
           await new Promise((r) => setTimeout(r, 150));
         } catch (_) {}
       }
-      // Combinar top-tracks + extra, deduplicar
-      const combined = [...topTracks, ...extraTracks];
-      topTracks = Array.from(new Map(combined.map((t) => [t.id, t])).values());
-      console.log(`✅ Total canciones de ${artist.name}: ${topTracks.length}`);
+      // Deduplicar por ID
+      topTracks = Array.from(new Map(topTracks.map((t) => [t.id, t])).values());
+      console.log(`✅ Canciones de ${artist.name}: ${topTracks.length}`);
     } catch (e) {
-      console.warn(`⚠️ búsqueda extendida falló:`, e.message);
+      console.warn(`⚠️ búsqueda de canciones falló:`, e.message);
     }
 
     // ── Álbumes (tolerante a 403) ─────────────────────────────────────────────
