@@ -95,15 +95,15 @@ function ArtistProfile({ artistId, onClose, onPlayTrack, onTracksLoaded, current
             <div className="artist-stats">
               <span className="artist-stat">
                 <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                  <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
                 </svg>
-                {spotifyService.formatFollowers(artist.followers)} seguidores
+                {topTracks.length} canciones disponibles
               </span>
               <span className="artist-stat">
                 <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
                 </svg>
-                Popularidad {artist.popularity}%
+                0 canciones favoritas
               </span>
             </div>
             {artist.genres.length > 0 && (

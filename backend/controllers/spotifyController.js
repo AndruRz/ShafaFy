@@ -416,38 +416,31 @@ exports.getArtistProfile = async (req, res) => {
     const artistRes = await axios.get(`https://api.spotify.com/v1/artists/${id}`, { headers });
     const artist = artistRes.data;
 
-    // ── Canciones del artista via búsqueda (no usa top-tracks que da 403) ──────
-    // Spotify en modo dev bloquea /top-tracks, usamos search que sí funciona
+    // ── Canciones del artista via búsqueda (top-tracks da 403 en modo dev) ─────
     let topTracks = [];
     try {
-      // 3 búsquedas paginadas para traer hasta ~60 canciones
       const offsets = [0, 20, 40];
       for (const offset of offsets) {
         try {
           const res = await axios.get('https://api.spotify.com/v1/search', {
             headers,
             params: {
-              q: artist.name,   // búsqueda simple por nombre, sin filtro rígido
+              q: artist.name,
               type: 'track',
               limit: 20,
               market: 'US',
               offset,
             },
           });
-          // Filtro flexible: incluir si el artista aparece en cualquier posición
-          // (acepta colaboraciones y features, pero descarta artistas completamente distintos)
-          const artistNameLower = artist.name.toLowerCase();
-          const filtered = res.data.tracks.items.filter((t) =>
-            t.artists.some((a) => a.name.toLowerCase().includes(artistNameLower) ||
-                                   artistNameLower.includes(a.name.toLowerCase()))
-          );
-          topTracks = topTracks.concat(filtered.map(mapTrack));
+          // Sin filtro — tomamos todos los resultados de la búsqueda
+          // YouTube se encarga de reproducir la canción correcta
+          topTracks = topTracks.concat(res.data.tracks.items.map(mapTrack));
           await new Promise((r) => setTimeout(r, 150));
         } catch (_) {}
       }
       // Deduplicar por ID
       topTracks = Array.from(new Map(topTracks.map((t) => [t.id, t])).values());
-      console.log(`✅ Canciones de ${artist.name}: ${topTracks.length}`);
+      console.log(`✅ Canciones encontradas para "${artist.name}": ${topTracks.length}`);
     } catch (e) {
       console.warn(`⚠️ búsqueda de canciones falló:`, e.message);
     }
