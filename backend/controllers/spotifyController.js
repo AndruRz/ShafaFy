@@ -419,91 +419,29 @@ exports.getArtistProfile = async (req, res) => {
     // ── Canciones del artista via búsqueda (top-tracks da 403 en modo dev) ─────
     let topTracks = [];
     try {
-      // Estrategia 1: Intentar endpoint oficial de top-tracks primero
-      // (funciona si la app tiene los permisos correctos)
-      try {
-        const topTracksRes = await axios.get(
-          `https://api.spotify.com/v1/artists/${id}/top-tracks`,
-          { headers, params: { market: 'US' } }
-        );
-        if (topTracksRes.data.tracks && topTracksRes.data.tracks.length > 0) {
-          topTracks = topTracksRes.data.tracks.map(mapTrack);
-          console.log(`✅ Top-tracks oficial encontradas para "${artist.name}": ${topTracks.length}`);
-        }
-      } catch (topTrackErr) {
-        console.warn(`⚠️ top-tracks endpoint falló (${topTrackErr.response?.status}), usando búsqueda alternativa...`);
+      const offsets = [0, 20, 40];
+      for (const offset of offsets) {
+        try {
+          const res = await axios.get('https://api.spotify.com/v1/search', {
+            headers,
+            params: {
+              q: `artist:"${artist.name}"`,
+              type: 'track',
+              limit: 50,
+              market: 'US',
+              offset,
+            },
+          });
+          // Filtrar: solo canciones donde el artista buscado aparece en la lista de artistas
+          const filtered = res.data.tracks.items.filter((t) =>
+            t.artists.some((a) => a.id === id)
+          );
+          topTracks = topTracks.concat(filtered.map(mapTrack));
+          await new Promise((r) => setTimeout(r, 150));
+        } catch (_) {}
       }
-
-      // Estrategia 2: Si no hay canciones aún, buscar por nombre del artista
-      if (topTracks.length === 0) {
-        const artistNameLower = artist.name.toLowerCase();
-        const offsets = [0, 20, 40];
-
-        for (const offset of offsets) {
-          try {
-            const res = await axios.get('https://api.spotify.com/v1/search', {
-              headers,
-              params: {
-                q: `artist:"${artist.name}"`,
-                type: 'track',
-                limit: 50,
-                market: 'US',
-                offset,
-              },
-            });
-
-            const items = res.data.tracks.items;
-
-            // ✅ FILTRO FLEXIBLE: acepta si el ID coincide O si el nombre del artista coincide
-            // Esto resuelve el bug donde la misma banda puede tener IDs ligeramente distintos
-            const filtered = items.filter((t) =>
-              t.artists.some(
-                (a) =>
-                  a.id === id ||
-                  a.name.toLowerCase() === artistNameLower ||
-                  a.name.toLowerCase().includes(artistNameLower) ||
-                  artistNameLower.includes(a.name.toLowerCase())
-              )
-            );
-
-            topTracks = topTracks.concat(filtered.map(mapTrack));
-            await new Promise((r) => setTimeout(r, 150));
-          } catch (_) {}
-        }
-
-        // Estrategia 3: Si todavía no hay resultados, búsqueda más simple sin comillas
-        if (topTracks.length === 0) {
-          console.warn(`⚠️ Búsqueda con comillas falló, intentando búsqueda simple...`);
-          try {
-            const res = await axios.get('https://api.spotify.com/v1/search', {
-              headers,
-              params: {
-                q: artist.name,
-                type: 'track',
-                limit: 50,
-                market: 'US',
-              },
-            });
-
-            const artistNameLower = artist.name.toLowerCase();
-            const filtered = res.data.tracks.items.filter((t) =>
-              t.artists.some(
-                (a) =>
-                  a.id === id ||
-                  a.name.toLowerCase() === artistNameLower
-              )
-            );
-
-            topTracks = filtered.map(mapTrack);
-          } catch (_) {}
-        }
-      }
-
-      // Deduplicar por ID y ordenar por popularidad
-      topTracks = Array.from(new Map(topTracks.map((t) => [t.id, t])).values())
-        .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
-        .slice(0, 20); // Máximo 20 canciones
-
+      // Deduplicar por ID
+      topTracks = Array.from(new Map(topTracks.map((t) => [t.id, t])).values());
       console.log(`✅ Canciones encontradas para "${artist.name}": ${topTracks.length}`);
     } catch (e) {
       console.warn(`⚠️ búsqueda de canciones falló:`, e.message);
