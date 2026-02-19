@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import spotifyService from '../services/spotifyService';
 import './ArtistProfile.css';
 
-function ArtistProfile({ artistId, onClose, onPlayTrack, onTracksLoaded, currentTrack, isPlaying, youtubeLoading }) {
+function ArtistProfile({ artistId, onClose, onPlayTrack, onTracksLoaded, currentTrack, isPlaying, youtubeLoading, fallbackTracks = [] }) {
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -19,6 +19,12 @@ function ArtistProfile({ artistId, onClose, onPlayTrack, onTracksLoaded, current
       setLoading(true);
       setError('');
       const data = await spotifyService.getArtistProfile(artistId);
+
+      // ✅ Si el backend no encontró canciones, usar las de la búsqueda general
+      if ((!data.topTracks || data.topTracks.length === 0) && fallbackTracks.length > 0) {
+        data.topTracks = fallbackTracks;
+      }
+
       setProfileData(data);
       // Scroll al inicio del perfil
       if (containerRef.current) {
