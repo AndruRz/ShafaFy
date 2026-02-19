@@ -416,32 +416,61 @@ exports.getArtistProfile = async (req, res) => {
     const artistRes = await axios.get(`https://api.spotify.com/v1/artists/${id}`, { headers });
     const artist = artistRes.data;
 
-    // ── Canciones del artista via búsqueda (top-tracks da 403 en modo dev) ─────
+    // ── Canciones del artista ─────────────────────────────────────────────────
     let topTracks = [];
     try {
-      const offsets = [0, 20, 40];
-      for (const offset of offsets) {
-        try {
-          const res = await axios.get('https://api.spotify.com/v1/search', {
-            headers,
-            params: {
-              q: `artist:"${artist.name}"`,
-              type: 'track',
-              limit: 50,
-              market: 'US',
-              offset,
-            },
-          });
-          // Filtrar: solo canciones donde el artista buscado aparece en la lista de artistas
-          const filtered = res.data.tracks.items.filter((t) =>
-            t.artists.some((a) => a.id === id)
-          );
-          topTracks = topTracks.concat(filtered.map(mapTrack));
-          await new Promise((r) => setTimeout(r, 150));
-        } catch (_) {}
+      const artistNameLower = artist.name.toLowerCase();
+
+      // Estrategia 1: endpoint oficial /top-tracks
+      try {
+        const topTracksRes = await axios.get(
+          `https://api.spotify.com/v1/artists/${id}/top-tracks`,
+          { headers, params: { market: 'US' } }
+        );
+        if (topTracksRes.data.tracks?.length > 0) {
+          topTracks = topTracksRes.data.tracks.map(mapTrack);
+          console.log(`✅ top-tracks oficial: ${topTracks.length} canciones para "${artist.name}"`);
+        }
+      } catch (e) {
+        console.warn(`⚠️ top-tracks falló (${e.response?.status}), usando búsqueda alternativa...`);
       }
-      // Deduplicar por ID
-      topTracks = Array.from(new Map(topTracks.map((t) => [t.id, t])).values());
+
+      // Estrategia 2: búsqueda por nombre si top-tracks falló
+      if (topTracks.length === 0) {
+        const offsets = [0, 20, 40];
+        for (const offset of offsets) {
+          try {
+            const res = await axios.get('https://api.spotify.com/v1/search', {
+              headers,
+              params: {
+                q: `artist:"${artist.name}"`,
+                type: 'track',
+                limit: 50,
+                market: 'US',
+                offset,
+              },
+            });
+            // ✅ Filtro flexible: acepta por ID exacto O por nombre coincidente
+            const filtered = res.data.tracks.items.filter((t) =>
+              t.artists.some(
+                (a) =>
+                  a.id === id ||
+                  a.name.toLowerCase() === artistNameLower ||
+                  a.name.toLowerCase().includes(artistNameLower) ||
+                  artistNameLower.includes(a.name.toLowerCase())
+              )
+            );
+            topTracks = topTracks.concat(filtered.map(mapTrack));
+            await new Promise((r) => setTimeout(r, 150));
+          } catch (_) {}
+        }
+      }
+
+      // Deduplicar, ordenar por popularidad y limitar a 20
+      topTracks = Array.from(new Map(topTracks.map((t) => [t.id, t])).values())
+        .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+        .slice(0, 20);
+
       console.log(`✅ Canciones encontradas para "${artist.name}": ${topTracks.length}`);
     } catch (e) {
       console.warn(`⚠️ búsqueda de canciones falló:`, e.message);
