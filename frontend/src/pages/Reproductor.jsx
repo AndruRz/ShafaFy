@@ -27,7 +27,6 @@ function Reproductor() {
   const [topArtist, setTopArtist] = useState(null);       // artista destacado en búsqueda
   const [selectedArtist, setSelectedArtist] = useState(null); // artista cuyo perfil se muestra
   const [artistTracks, setArtistTracks] = useState([]);   // canciones del perfil del artista activo
-  const [searchArtistTracks, setSearchArtistTracks] = useState([]); // canciones del artista filtradas desde búsqueda
 
   const ytPlayerRef = useRef(null);
   const ytContainerRef = useRef(null);
@@ -108,7 +107,6 @@ function Reproductor() {
       setTopArtist(null);
       setSelectedArtist(null);
       setArtistTracks([]);
-      setSearchArtistTracks([]);
       loadFeaturedTracks();
       return;
     }
@@ -135,23 +133,9 @@ function Reproductor() {
           const top = artistResults[0];
           const nameMatch = top.name.toLowerCase().includes(value.toLowerCase()) ||
                             value.toLowerCase().includes(top.name.toLowerCase().split(' ')[0]);
-          if (nameMatch) {
-            setTopArtist(top);
-            // ✅ Filtrar las canciones de la búsqueda que pertenecen a este artista
-            // Estas se pasarán al ArtistProfile para no depender del endpoint que falla
-            const artistNameLower = top.name.toLowerCase();
-            const filtered = trackResults.filter((t) =>
-              t.artist.toLowerCase().includes(artistNameLower) ||
-              artistNameLower.includes(t.artist.toLowerCase().split(',')[0].trim())
-            );
-            setSearchArtistTracks(filtered.length > 0 ? filtered : trackResults);
-          } else {
-            setTopArtist(null);
-            setSearchArtistTracks([]);
-          }
+          setTopArtist(nameMatch ? top : null);
         } else {
           setTopArtist(null);
-          setSearchArtistTracks([]);
         }
       } catch (err) {
         setError('Error al buscar canciones.');
@@ -399,7 +383,6 @@ function Reproductor() {
             currentTrack={currentTrack}
             isPlaying={isPlaying}
             youtubeLoading={youtubeLoading}
-            fallbackTracks={searchArtistTracks}
           />
         ) : (
           <div className="content-container">
