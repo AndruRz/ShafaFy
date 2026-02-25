@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import spotifyService from '../services/spotifyService';
+import historyService from '../services/historyService';   // ← NUEVO
 import ArtistProfile from './ArtistProfile';
+import UserProfile from './UserProfile';                   // ← NUEVO
 import './Reproductor.css';
 
 function Reproductor() {
@@ -24,10 +26,13 @@ function Reproductor() {
   const [youtubeLoading, setYoutubeLoading] = useState(false);
 
   // ─── Estado artista ─────────────────────────────────────────────────────────
-  const [topArtist, setTopArtist] = useState(null);       // artista destacado en búsqueda
-  const [selectedArtist, setSelectedArtist] = useState(null); // artista cuyo perfil se muestra
-  const [artistTracks, setArtistTracks] = useState([]);   // canciones del perfil del artista activo
-  const [searchArtistTracks, setSearchArtistTracks] = useState([]); // canciones del artista filtradas desde búsqueda
+  const [topArtist, setTopArtist] = useState(null);
+  const [selectedArtist, setSelectedArtist] = useState(null);
+  const [artistTracks, setArtistTracks] = useState([]);
+  const [searchArtistTracks, setSearchArtistTracks] = useState([]);
+
+  // ─── Estado perfil usuario ──────────────────────────────────────────────────
+  const [showUserProfile, setShowUserProfile] = useState(false);  // ← NUEVO
 
   const ytPlayerRef = useRef(null);
   const ytContainerRef = useRef(null);
@@ -119,26 +124,21 @@ function Reproductor() {
         setError('');
         setSelectedArtist(null);
 
-        // Buscar canciones y artista en paralelo
         const [trackResults, artistResults] = await Promise.all([
           spotifyService.search(value),
           spotifyService.searchArtists(value),
         ]);
 
         setTracks(trackResults);
-        // Scroll al inicio de resultados
         if (resultsRef.current) {
           resultsRef.current.scrollTo({ top: 0, behavior: 'smooth' });
         }
-        // Mostrar el artista más relevante si su nombre coincide razonablemente
         if (artistResults && artistResults.length > 0) {
           const top = artistResults[0];
           const nameMatch = top.name.toLowerCase().includes(value.toLowerCase()) ||
                             value.toLowerCase().includes(top.name.toLowerCase().split(' ')[0]);
           if (nameMatch) {
             setTopArtist(top);
-            // ✅ Filtrar las canciones de la búsqueda que pertenecen a este artista
-            // Estas se pasarán al ArtistProfile para no depender del endpoint que falla
             const artistNameLower = top.name.toLowerCase();
             const filtered = trackResults.filter((t) =>
               t.artist.toLowerCase().includes(artistNameLower) ||
@@ -237,12 +237,17 @@ function Reproductor() {
     });
   };
 
+  // ─── playTrackInternal: ahora también registra en historial ─────────────────
   const playTrackInternal = async (track) => {
     setCurrentTrack(track);
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
     setYoutubeLoading(true);
+
+    // ← NUEVO: registrar reproducción en el backend (fire & forget)
+    historyService.registerPlay(track);
+
     const videoId = await spotifyService.getYoutubeVideoId(track.name, track.artist);
     if (!videoId) {
       setYoutubeLoading(false);
@@ -268,7 +273,6 @@ function Reproductor() {
   };
 
   const playNext = () => {
-    // Si hay canciones del artista activo, navegar por esa lista
     const activeList = artistTracks.length > 0 ? artistTracks : tracks;
     if (!currentTrack || activeList.length === 0) return;
     const idx = activeList.findIndex((t) => t.id === currentTrack.id);
@@ -356,6 +360,21 @@ function Reproductor() {
       {/* Player YouTube invisible */}
       <div ref={ytContainerRef} style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: 0, height: 0, overflow: 'hidden' }} />
 
+      {/* ─── Panel de perfil de usuario ─────────────────────────────────────────── */}
+      {/* ← NUEVO: se monta igual que ArtistProfile, al hacer click en el avatar */}
+      {showUserProfile && (
+        <UserProfile
+          user={user}
+          onClose={() => setShowUserProfile(false)}
+          onPlayTrack={(track) => {
+            setShowUserProfile(false);
+            playTrack(track);
+          }}
+          currentTrack={currentTrack}
+          isPlaying={isPlaying}
+        />
+      )}
+
       {/* Header */}
       <header className="reproductor-header">
         <div className="header-logo">
@@ -373,7 +392,15 @@ function Reproductor() {
           />
         </div>
         <div className="header-user">
-          <div className="user-avatar">{user?.fullName?.charAt(0).toUpperCase()}</div>
+          {/* ← NUEVO: avatar es clickeable para abrir el perfil */}
+          <div
+            className="user-avatar"
+            onClick={() => setShowUserProfile(true)}
+            title="Ver mi perfil"
+            style={{ cursor: 'pointer' }}
+          >
+            {user?.fullName?.charAt(0).toUpperCase()}
+          </div>
           <span className="user-name">{user?.username}</span>
           <button className="logout-btn" onClick={handleLogout}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -389,7 +416,6 @@ function Reproductor() {
       {/* ─── Contenido central ─────────────────────────────────────────────────── */}
       <main className="reproductor-content" ref={resultsRef}>
 
-        {/* ── Vista perfil de artista ── */}
         {selectedArtist ? (
           <ArtistProfile
             artistId={selectedArtist}
@@ -436,7 +462,7 @@ function Reproductor() {
               </div>
             ) : (
               <>
-                {/* ── Tarjeta de artista destacado ── */}
+                {/* ── Tarjeta artista destacado ── */}
                 {topArtist && (
                   <div className="artist-result-card" onClick={() => setSelectedArtist(topArtist.id)}>
                     <div className="artist-result-img-wrap">
