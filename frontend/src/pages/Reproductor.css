@@ -565,3 +565,94 @@
   color: var(--color-text-dim);
   margin-bottom: 0.75rem;
 }
+
+/* ================================================
+   AÑADIR AL FINAL DE Reproductor.css
+   ================================================ */
+
+/* ── Botón Mis Canciones en el header ── */
+.mis-canciones-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  color: var(--color-text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.mis-canciones-btn:hover {
+  background: rgba(239,68,68,0.12);
+  border-color: rgba(239,68,68,0.35);
+  color: #ec4899;
+}
+
+.mis-canciones-btn.active {
+  background: rgba(239,68,68,0.15);
+  border-color: rgba(239,68,68,0.5);
+  color: #ef4444;
+}
+
+/* ── Avatar activo (cuando el perfil está abierto) ── */
+.user-avatar--active {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* ── Corazón en el player bar ── */
+.heart-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: transparent;
+  color: var(--color-text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  flex-shrink: 0;
+  margin-left: 0.5rem;
+}
+
+.heart-btn:hover {
+  background: rgba(239,68,68,0.12);
+  border-color: rgba(239,68,68,0.35);
+  color: #ec4899;
+  transform: scale(1.1);
+}
+
+.heart-btn--active {
+  color: #ef4444;
+  border-color: rgba(239,68,68,0.4);
+  background: rgba(239,68,68,0.1);
+}
+
+.heart-btn--active:hover {
+  background: rgba(239,68,68,0.18);
+  transform: scale(1.1);
+}
+
+/* Animación al activar */
+.heart-btn--active svg {
+  animation: heartPop 0.3s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+@keyframes heartPop {
+  0%   { transform: scale(1);    }
+  40%  { transform: scale(1.35); }
+  70%  { transform: scale(0.9);  }
+  100% { transform: scale(1);    }
+}
+
+.heart-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}

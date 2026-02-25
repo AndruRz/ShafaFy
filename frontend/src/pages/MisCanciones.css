@@ -1,0 +1,145 @@
+/* ================================
+   MIS CANCIONES
+   Hereda de ArtistProfile.css y Reproductor.css
+   ================================ */
+
+.mis-canciones {
+  padding: 1.5rem 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  animation: fadeInUp 0.3s ease-out;
+}
+
+/* ── Hero ── */
+.mc-hero {
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+  margin-bottom: 2rem;
+  min-height: 220px;
+  background: var(--color-dark-light);
+}
+
+.mc-hero-blur {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(239, 68,  68,  0.35) 0%,
+    rgba(236, 72,  153, 0.30) 45%,
+    rgba(124, 58,  237, 0.20) 100%
+  );
+  animation: mcHeroShift 8s ease-in-out infinite alternate;
+}
+
+@keyframes mcHeroShift {
+  from { opacity: 0.75; filter: hue-rotate(0deg);  }
+  to   { opacity: 1;    filter: hue-rotate(15deg); }
+}
+
+/* ── Avatar corazón ── */
+.mc-avatar {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ef4444, #ec4899);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  border: 3px solid rgba(255,255,255,0.2);
+  box-shadow: 0 8px 32px rgba(239,68,68,0.4);
+  flex-shrink: 0;
+}
+
+/* ── Fecha guardado ── */
+.mc-saved-at {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--color-text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 90px;
+  justify-content: flex-end;
+}
+
+.mc-saved-at svg { color: #ec4899; flex-shrink: 0; }
+
+/* ── Botón quitar (X) ── */
+.mc-remove-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: var(--color-text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.track-card:hover .mc-remove-btn { opacity: 1; }
+
+.mc-remove-btn:hover {
+  background: rgba(239,68,68,0.15);
+  border-color: rgba(239,68,68,0.4);
+  color: #ef4444;
+}
+
+/* ── Estado vacío ── */
+.mc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 5rem 2rem;
+  text-align: center;
+}
+
+.mc-empty-heart {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(239,68,68,0.5);
+  animation: mcHeartPulse 2.5s ease-in-out infinite;
+}
+
+@keyframes mcHeartPulse {
+  0%,100% { transform: scale(1);     opacity: 0.7; }
+  50%      { transform: scale(1.06); opacity: 1;   }
+}
+
+.mc-empty h3 {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.mc-empty p {
+  font-size: 0.9rem;
+  color: var(--color-text-dim);
+  max-width: 360px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .mis-canciones { padding: 1.25rem 1rem; }
+  .mc-avatar { width: 100px; height: 100px; }
+  .mc-avatar svg { width: 44px; height: 44px; }
+  .mc-saved-at { display: none; }
+}

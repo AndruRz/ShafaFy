@@ -3,37 +3,45 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import spotifyService from '../services/spotifyService';
 import historyService from '../services/historyService';
+import favoritesService from '../services/favoritesService';
 import ArtistProfile from './ArtistProfile';
 import UserProfile from './UserProfile';
+import MisCanciones from './MisCanciones';
 import './Reproductor.css';
 
 function Reproductor() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [user, setUser]                   = useState(null);
-  const [loading, setLoading]             = useState(true);
-  const [showWelcome, setShowWelcome]     = useState(false);
-  const [tracks, setTracks]               = useState([]);
-  const [tracksLoading, setTracksLoading] = useState(false);
-  const [searchQuery, setSearchQuery]     = useState('');
-  const [currentTrack, setCurrentTrack]   = useState(null);
-  const [isPlaying, setIsPlaying]         = useState(false);
-  const [currentTime, setCurrentTime]     = useState(0);
-  const [duration, setDuration]           = useState(0);
-  const [volume, setVolume]               = useState(80);
-  const [error, setError]                 = useState('');
+  const [user, setUser]                     = useState(null);
+  const [loading, setLoading]               = useState(true);
+  const [showWelcome, setShowWelcome]       = useState(false);
+  const [tracks, setTracks]                 = useState([]);
+  const [tracksLoading, setTracksLoading]   = useState(false);
+  const [searchQuery, setSearchQuery]       = useState('');
+  const [currentTrack, setCurrentTrack]     = useState(null);
+  const [isPlaying, setIsPlaying]           = useState(false);
+  const [currentTime, setCurrentTime]       = useState(0);
+  const [duration, setDuration]             = useState(0);
+  const [volume, setVolume]                 = useState(80);
+  const [error, setError]                   = useState('');
   const [youtubeLoading, setYoutubeLoading] = useState(false);
 
-  // ─── Estado artista ──────────────────────────────────────────────────────────
+  // ─── Artista ─────────────────────────────────────────────────────────────────
   const [topArtist, setTopArtist]                   = useState(null);
   const [selectedArtist, setSelectedArtist]         = useState(null);
   const [artistTracks, setArtistTracks]             = useState([]);
   const [searchArtistTracks, setSearchArtistTracks] = useState([]);
 
-  // ─── Estado perfil usuario ───────────────────────────────────────────────────
+  // ─── Perfil usuario ──────────────────────────────────────────────────────────
   const [showUserProfile, setShowUserProfile] = useState(false);
-  const [userTracks, setUserTracks]           = useState([]); // top tracks del perfil
+  const [userTracks, setUserTracks]           = useState([]);
+
+  // ─── Favoritos ───────────────────────────────────────────────────────────────
+  const [isFavorite, setIsFavorite]           = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [showMisCanciones, setShowMisCanciones] = useState(false);
+  const [favTracks, setFavTracks]             = useState([]);
 
   const ytPlayerRef      = useRef(null);
   const ytContainerRef   = useRef(null);
@@ -42,26 +50,24 @@ function Reproductor() {
   const searchTimeout    = useRef(null);
   const tracksRef        = useRef([]);
   const artistTracksRef  = useRef([]);
-  const userTracksRef    = useRef([]);   // ref para next/prev en perfil
+  const userTracksRef    = useRef([]);
+  const favTracksRef     = useRef([]);
   const currentTrackRef  = useRef(null);
   const resultsRef       = useRef(null);
 
-  const handleArtistTracksLoaded = (loadedTracks) => {
-    setArtistTracks(loadedTracks);
-    setTopArtist((prev) => prev ? { ...prev, totalTracks: loadedTracks.length } : prev);
+  const handleArtistTracksLoaded = (t) => {
+    setArtistTracks(t);
+    setTopArtist(prev => prev ? { ...prev, totalTracks: t.length } : prev);
   };
+  const handleUserTracksLoaded = (t) => setUserTracks(t);
+  const handleFavTracksLoaded  = (t) => setFavTracks(t);
 
-  // Cuando el UserProfile carga el top, guardarlo para navegación
-  const handleUserTracksLoaded = (loadedTracks) => {
-    setUserTracks(loadedTracks);
-  };
-
-  useEffect(() => { tracksRef.current      = tracks;       }, [tracks]);
+  useEffect(() => { tracksRef.current       = tracks;       }, [tracks]);
   useEffect(() => { artistTracksRef.current = artistTracks; }, [artistTracks]);
   useEffect(() => { userTracksRef.current   = userTracks;   }, [userTracks]);
+  useEffect(() => { favTracksRef.current    = favTracks;    }, [favTracks]);
   useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
 
-  // Cargar YouTube IFrame API
   useEffect(() => {
     if (window.YT && window.YT.Player) { ytReadyRef.current = true; return; }
     const tag = document.createElement('script');
@@ -83,9 +89,7 @@ function Reproductor() {
         }
         await loadFeaturedTracks();
         setLoading(false);
-      } catch {
-        navigate('/auth');
-      }
+      } catch { navigate('/auth'); }
     };
     checkAuth();
   }, [navigate, location]);
@@ -111,7 +115,6 @@ function Reproductor() {
     }
   };
 
-  // ─── Búsqueda ────────────────────────────────────────────────────────────────
   const handleSearch = (e) => {
     const value = e.target.value;
     setSearchQuery(value);
@@ -140,16 +143,17 @@ function Reproductor() {
         setTracks(trackResults);
         if (resultsRef.current) resultsRef.current.scrollTo({ top: 0, behavior: 'smooth' });
 
-        if (artistResults && artistResults.length > 0) {
+        if (artistResults?.length > 0) {
           const top = artistResults[0];
-          const nameMatch = top.name.toLowerCase().includes(value.toLowerCase()) ||
-                            value.toLowerCase().includes(top.name.toLowerCase().split(' ')[0]);
+          const nameMatch =
+            top.name.toLowerCase().includes(value.toLowerCase()) ||
+            value.toLowerCase().includes(top.name.toLowerCase().split(' ')[0]);
           if (nameMatch) {
             setTopArtist(top);
-            const artistNameLower = top.name.toLowerCase();
-            const filtered = trackResults.filter((t) =>
-              t.artist.toLowerCase().includes(artistNameLower) ||
-              artistNameLower.includes(t.artist.toLowerCase().split(',')[0].trim())
+            const aLow = top.name.toLowerCase();
+            const filtered = trackResults.filter(t =>
+              t.artist.toLowerCase().includes(aLow) ||
+              aLow.includes(t.artist.toLowerCase().split(',')[0].trim())
             );
             setSearchArtistTracks(filtered.length > 0 ? filtered : trackResults);
           } else {
@@ -168,14 +172,13 @@ function Reproductor() {
     }, 500);
   };
 
-  // ─── YouTube helpers ─────────────────────────────────────────────────────────
   const startProgressTracking = () => {
     clearInterval(progressInterval.current);
     progressInterval.current = setInterval(() => {
       if (ytPlayerRef.current && ytReadyRef.current) {
         try {
           const t = ytPlayerRef.current.getCurrentTime?.() || 0;
-          const d = ytPlayerRef.current.getDuration?.() || 0;
+          const d = ytPlayerRef.current.getDuration?.()    || 0;
           setCurrentTime(t);
           if (d > 0) setDuration(d);
         } catch (_) {}
@@ -222,15 +225,14 @@ function Reproductor() {
               } else if (event.data === YTS.ENDED) {
                 setIsPlaying(false);
                 clearInterval(progressInterval.current);
-                // Navegar por la lista activa (perfil > artista > búsqueda)
-                const activeList = userTracksRef.current.length > 0
-                  ? userTracksRef.current
-                  : artistTracksRef.current.length > 0
-                    ? artistTracksRef.current
-                    : tracksRef.current;
+                const activeList =
+                  favTracksRef.current.length    > 0 ? favTracksRef.current    :
+                  userTracksRef.current.length   > 0 ? userTracksRef.current   :
+                  artistTracksRef.current.length > 0 ? artistTracksRef.current :
+                  tracksRef.current;
                 const ct = currentTrackRef.current;
                 if (!ct || activeList.length === 0) return;
-                const idx = activeList.findIndex((t) => t.id === ct.id);
+                const idx  = activeList.findIndex(t => t.id === ct.id);
                 const next = activeList[(idx + 1) % activeList.length];
                 if (next) playTrackInternal(next);
               }
@@ -249,7 +251,6 @@ function Reproductor() {
     });
   };
 
-  // ─── playTrackInternal: registra en historial ────────────────────────────────
   const playTrackInternal = async (track) => {
     setCurrentTrack(track);
     setIsPlaying(false);
@@ -257,8 +258,8 @@ function Reproductor() {
     setDuration(0);
     setYoutubeLoading(true);
 
-    // Registrar reproducción (fire & forget)
     historyService.registerPlay(track);
+    favoritesService.checkFavorite(track.id).then(res => setIsFavorite(res.isFavorite));
 
     const videoId = await spotifyService.getYoutubeVideoId(track.name, track.artist);
     if (!videoId) {
@@ -284,25 +285,35 @@ function Reproductor() {
     } catch (_) {}
   };
 
-  // ─── Lógica de next/prev: respeta lista activa ───────────────────────────────
+  const handleToggleFavorite = async () => {
+    if (!currentTrack || favoriteLoading) return;
+    try {
+      setFavoriteLoading(true);
+      const res = await favoritesService.toggle(currentTrack);
+      setIsFavorite(res.isFavorite);
+    } catch { /* silencioso */ }
+    finally { setFavoriteLoading(false); }
+  };
+
   const getActiveList = () => {
-    if (userTracks.length > 0)   return userTracks;
+    if (favTracks.length    > 0) return favTracks;
+    if (userTracks.length   > 0) return userTracks;
     if (artistTracks.length > 0) return artistTracks;
     return tracks;
   };
 
   const playNext = () => {
-    const activeList = getActiveList();
-    if (!currentTrack || activeList.length === 0) return;
-    const idx = activeList.findIndex((t) => t.id === currentTrack.id);
-    playTrack(activeList[(idx + 1) % activeList.length]);
+    const list = getActiveList();
+    if (!currentTrack || list.length === 0) return;
+    const idx = list.findIndex(t => t.id === currentTrack.id);
+    playTrack(list[(idx + 1) % list.length]);
   };
 
   const playPrev = () => {
-    const activeList = getActiveList();
-    if (!currentTrack || activeList.length === 0) return;
-    const idx = activeList.findIndex((t) => t.id === currentTrack.id);
-    playTrack(activeList[(idx - 1 + activeList.length) % activeList.length]);
+    const list = getActiveList();
+    if (!currentTrack || list.length === 0) return;
+    const idx = list.findIndex(t => t.id === currentTrack.id);
+    playTrack(list[(idx - 1 + list.length) % list.length]);
   };
 
   const handleSeek = (e) => {
@@ -317,11 +328,9 @@ function Reproductor() {
     if (ytPlayerRef.current) { try { ytPlayerRef.current.setVolume(vol); } catch (_) {} }
   };
 
-  const formatTime = (seconds) => {
-    if (!seconds || isNaN(seconds)) return '0:00';
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m}:${s.toString().padStart(2, '0')}`;
+  const formatTime = (s) => {
+    if (!s || isNaN(s)) return '0:00';
+    return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   };
 
   const handleLogout = async () => {
@@ -331,13 +340,13 @@ function Reproductor() {
     navigate('/auth');
   };
 
-  // ── Pantalla de carga ────────────────────────────────────────────────────────
+  // ── Pantallas especiales ─────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="reproductor-loading">
         <div className="loading-spinner">
           <svg className="spinner-circle" viewBox="0 0 50 50">
-            <circle cx="25" cy="25" r="20" fill="none" strokeWidth="5"></circle>
+            <circle cx="25" cy="25" r="20" fill="none" strokeWidth="5"/>
           </svg>
         </div>
         <p>Cargando...</p>
@@ -349,9 +358,9 @@ function Reproductor() {
     return (
       <div className="welcome-screen">
         <div className="welcome-background">
-          <div className="gradient-orb orb-1"></div>
-          <div className="gradient-orb orb-2"></div>
-          <div className="gradient-orb orb-3"></div>
+          <div className="gradient-orb orb-1"/>
+          <div className="gradient-orb orb-2"/>
+          <div className="gradient-orb orb-3"/>
         </div>
         <div className="welcome-content">
           <div className="welcome-logo">
@@ -365,7 +374,7 @@ function Reproductor() {
             <div className="feature-item"><span className="feature-icon">🚫</span><h3>Sin anuncios</h3><p>Disfruta sin interrupciones</p></div>
           </div>
           <div className="welcome-loading">
-            <div className="loading-bar"><div className="loading-progress"></div></div>
+            <div className="loading-bar"><div className="loading-progress"/></div>
             <p>Preparando tu experiencia musical...</p>
           </div>
         </div>
@@ -373,37 +382,44 @@ function Reproductor() {
     );
   }
 
-  // ─── Vista activa del contenido ──────────────────────────────────────────────
-  // Prioridad: UserProfile > ArtistProfile > lista normal
-  const showContent = () => {
-    if (showUserProfile) {
-      return (
-        <UserProfile
-          user={user}
-          onClose={() => { setShowUserProfile(false); setUserTracks([]); }}
-          onPlayTrack={playTrack}
-          onTracksLoaded={handleUserTracksLoaded}
-          currentTrack={currentTrack}
-          isPlaying={isPlaying}
-          youtubeLoading={youtubeLoading}
-        />
-      );
-    }
+  // ── Vista activa ─────────────────────────────────────────────────────────────
+  const renderContent = () => {
+    if (showMisCanciones) return (
+      <MisCanciones
+        onClose={() => { setShowMisCanciones(false); setFavTracks([]); }}
+        onPlayTrack={playTrack}
+        onTracksLoaded={handleFavTracksLoaded}
+        currentTrack={currentTrack}
+        isPlaying={isPlaying}
+        youtubeLoading={youtubeLoading}
+      />
+    );
 
-    if (selectedArtist) {
-      return (
-        <ArtistProfile
-          artistId={selectedArtist}
-          onClose={() => { setSelectedArtist(null); setArtistTracks([]); }}
-          onPlayTrack={playTrack}
-          onTracksLoaded={handleArtistTracksLoaded}
-          currentTrack={currentTrack}
-          isPlaying={isPlaying}
-          youtubeLoading={youtubeLoading}
-          fallbackTracks={searchArtistTracks}
-        />
-      );
-    }
+    if (showUserProfile) return (
+      <UserProfile
+        user={user}
+        onClose={() => { setShowUserProfile(false); setUserTracks([]); }}
+        onPlayTrack={playTrack}
+        onTracksLoaded={handleUserTracksLoaded}
+        currentTrack={currentTrack}
+        isPlaying={isPlaying}
+        youtubeLoading={youtubeLoading}
+        onOpenFavorites={() => { setShowUserProfile(false); setShowMisCanciones(true); }}
+      />
+    );
+
+    if (selectedArtist) return (
+      <ArtistProfile
+        artistId={selectedArtist}
+        onClose={() => { setSelectedArtist(null); setArtistTracks([]); }}
+        onPlayTrack={playTrack}
+        onTracksLoaded={handleArtistTracksLoaded}
+        currentTrack={currentTrack}
+        isPlaying={isPlaying}
+        youtubeLoading={youtubeLoading}
+        fallbackTracks={searchArtistTracks}
+      />
+    );
 
     return (
       <div className="content-container">
@@ -456,9 +472,7 @@ function Reproductor() {
                   {topArtist.genres.length > 0 && (
                     <p className="artist-result-genre">{topArtist.genres.slice(0, 2).join(', ')}</p>
                   )}
-                  <p className="artist-result-followers">
-                    {topArtist.totalTracks ?? '—'} canciones disponibles
-                  </p>
+                  <p className="artist-result-followers">{topArtist.totalTracks ?? '—'} canciones disponibles</p>
                 </div>
                 <div className="artist-result-action">
                   <span>Ver artista</span>
@@ -469,12 +483,10 @@ function Reproductor() {
               </div>
             )}
 
-            {topArtist && tracks.length > 0 && (
-              <p className="songs-section-label">Canciones</p>
-            )}
+            {topArtist && tracks.length > 0 && <p className="songs-section-label">Canciones</p>}
 
             <div className="tracks-grid">
-              {tracks.map((track) => (
+              {tracks.map(track => (
                 <div
                   key={track.id}
                   className={`track-card ${currentTrack?.id === track.id ? 'active' : ''}`}
@@ -500,9 +512,7 @@ function Reproductor() {
                       ) : currentTrack?.id === track.id && isPlaying ? (
                         <div className="playing-indicator"><span/><span/><span/></div>
                       ) : (
-                        <svg className="play-icon" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M8 5v14l11-7z"/>
-                        </svg>
+                        <svg className="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                       )}
                     </div>
                   </div>
@@ -533,10 +543,9 @@ function Reproductor() {
   return (
     <div className="reproductor-page">
 
-      {/* Player YouTube invisible */}
       <div ref={ytContainerRef} style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: 0, height: 0, overflow: 'hidden' }} />
 
-      {/* Header */}
+      {/* ── Header ── */}
       <header className="reproductor-header">
         <div className="header-logo">
           <span className="logo-text">Shafa<span className="logo-accent">Fy</span></span>
@@ -553,15 +562,30 @@ function Reproductor() {
           />
         </div>
         <div className="header-user">
-          {/* Avatar clickeable → abre perfil */}
+          {/* Botón Mis Canciones */}
+          <button
+            className={`mis-canciones-btn ${showMisCanciones ? 'active' : ''}`}
+            onClick={() => {
+              setShowMisCanciones(v => !v);
+              setShowUserProfile(false);
+              setSelectedArtist(null);
+              setFavTracks([]);
+            }}
+            title="Mis canciones favoritas"
+          >
+            <svg viewBox="0 0 24 24" fill={showMisCanciones ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" width="18" height="18">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+          </button>
+
+          {/* Avatar → perfil */}
           <div
             className={`user-avatar ${showUserProfile ? 'user-avatar--active' : ''}`}
             onClick={() => {
               setShowUserProfile(v => !v);
-              if (!showUserProfile) {
-                setSelectedArtist(null);
-                setUserTracks([]);
-              }
+              setShowMisCanciones(false);
+              setSelectedArtist(null);
+              setUserTracks([]);
             }}
             title="Ver mi perfil"
             style={{ cursor: 'pointer' }}
@@ -580,12 +604,12 @@ function Reproductor() {
         </div>
       </header>
 
-      {/* Contenido */}
+      {/* ── Contenido ── */}
       <main className="reproductor-content" ref={resultsRef}>
-        {showContent()}
+        {renderContent()}
       </main>
 
-      {/* Player inferior */}
+      {/* ── Player bar ── */}
       {currentTrack && (
         <div className="player-bar">
           <div className="player-track-info">
@@ -625,11 +649,30 @@ function Reproductor() {
             </div>
           </div>
 
+          {/* Volumen + corazón */}
           <div className="player-volume">
             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
               <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
             </svg>
             <input type="range" min="0" max="100" step="5" value={volume} onChange={handleVolume} className="volume-bar" />
+
+            <button
+              className={`heart-btn ${isFavorite ? 'heart-btn--active' : ''}`}
+              onClick={handleToggleFavorite}
+              disabled={favoriteLoading}
+              title={isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill={isFavorite ? 'currentColor' : 'none'}
+                stroke="currentColor"
+                strokeWidth="2"
+                width="20"
+                height="20"
+              >
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+              </svg>
+            </button>
           </div>
         </div>
       )}

@@ -31,6 +31,7 @@ app.use('/api/spotify', require('./routes/spotify'));
 app.use('/api/youtube', require('./routes/youtube'));
 app.use('/api', require('./routes/index'));
 app.use('/api/history', require('./routes/history'));
+app.use('/api/favorites', require('./routes/favorites'));
 
 // Ruta de prueba (raíz)
 app.get('/', (req, res) => {
