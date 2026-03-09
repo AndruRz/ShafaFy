@@ -243,8 +243,8 @@ function Reproductor() {
         if (!window.YT || !window.YT.Player) { setTimeout(waitForYT, 200); return; }
         const vol = volume;
         ytPlayerRef.current = new window.YT.Player('yt-player-inner', {
-          height: '0', width: '0', videoId,
-          playerVars: { autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1, rel: 0, fs: 0 },
+          height: '1', width: '1', videoId,
+          playerVars: { autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1, rel: 0, fs: 0, playsinline: 1 },
           events: {
             onReady: (event) => {
               event.target.setVolume(vol);
@@ -585,7 +585,7 @@ function Reproductor() {
   return (
     <div className="reproductor-page">
 
-      <div ref={ytContainerRef} style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: 0, height: 0, overflow: 'hidden' }} />
+      <div ref={ytContainerRef} style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: '1px', height: '1px', overflow: 'hidden' }} />
 
       {/* ── Header ── */}
       <header className="reproductor-header">
