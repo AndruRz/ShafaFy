@@ -303,12 +303,14 @@ function Reproductor() {
     favoritesService.checkFavorite(track.id).then(res => setIsFavorite(res.isFavorite));
 
     const videoId = await spotifyService.getYoutubeVideoId(track.name, track.artist);
+
     if (!videoId) {
       setYoutubeLoading(false);
       setError(`No se encontró "${track.name}" en YouTube.`);
       setTimeout(() => setError(''), 4000);
       return;
     }
+
     setYoutubeLoading(false);
     await loadYoutubePlayer(videoId);
   };
