@@ -223,10 +223,24 @@ function LandingPage() {
                 pueden aplicarse en aplicaciones web modernas, desde la gestión de listas de 
                 reproducción hasta sistemas de recomendación inteligentes.
               </p>
+              <p className="about-description">
+                La integración con la <strong>API de Spotify</strong> nos permite acceder a información 
+                detallada de canciones, álbumes y artistas, incluyendo sus imágenes y metadatos. Sin embargo, 
+                Spotify no permite la reproducción directa de canciones a través de su API en proyectos 
+                de este tipo, por lo que integramos la <strong>YouTube Data API</strong> como motor de 
+                reproducción. Esta combinación nos da lo mejor de ambas plataformas: la riqueza de datos 
+                de Spotify y la capacidad de reproducción de YouTube.
+              </p>
+              <p className="about-description">
+                Es importante tener en cuenta que, debido a restricciones de <strong>derechos de autor</strong>, 
+                no todas las canciones están disponibles para reproducción en YouTube. Algunas pistas pueden 
+                no aparecer o estar bloqueadas según la región, lo cual es una limitación inherente a las 
+                políticas de las plataformas y está fuera del control de la aplicación.
+              </p>
             </div>
             <div className="about-image">
               <div className="image-wrapper">
-                <img src="./src/assets/logo shafaty.png" alt="ShafaFy Logo" />
+                <img src="../src/assets/logo shafaty.png" alt="ShafaFy Logo" />
                 <div className="image-glow"></div>
               </div>
             </div>
@@ -409,6 +423,29 @@ function LandingPage() {
               </div>
             </div>
 
+            <div className="tech-category">
+              <h4 className="tech-category-title">APIs Integradas</h4>
+              <div className="tech-logos">
+                <div className="tech-item">
+                  <div className="tech-logo">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                    </svg>
+                  </div>
+                  <span>Spotify API</span>
+                </div>
+
+                <div className="tech-item">
+                  <div className="tech-logo">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/>
+                    </svg>
+                  </div>
+                  <span>YouTube Data API</span>
+                </div>
+              </div>
+            </div>
+
             <div className="deployment-info">
               <h4 className="tech-category-title">Despliegue & Control de Versiones</h4>
               <div className="tech-logos">
@@ -429,38 +466,31 @@ function LandingPage() {
                   </div>
                   <span>Railway</span>
                 </div>
-
-                <div className="tech-item">
-                  <div className="tech-logo">
-                    <svg viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M16.934 8.519a6.839 6.839 0 0 1 3.608 1.03c.773.445 1.477 1.046 2.003 1.82.53.78.86 1.73.86 2.827 0 2.44-1.57 4.483-3.768 5.442v3.045c2.912-1.01 5.01-3.768 5.01-7.043 0-4.143-3.365-7.508-7.508-7.508h-.205zm-8.25 11.05a6.838 6.838 0 0 1-3.608-1.03c-.773-.445-1.477-1.046-2.003-1.82-.53-.78-.86-1.73-.86-2.827 0-2.44 1.57-4.483 3.768-5.442V5.405C2.07 6.415 0 9.172 0 12.447c0 4.143 3.365 7.508 7.508 7.508h.205l-.029.614zm3.342-3.342v3.342h.87v-3.342h-.87zm-.87 0h-.87v3.342h.87v-3.342zm1.74 0v3.342h.87v-3.342h-.87zm-3.478 0h-.87v3.342h.87v-3.342zm5.218 0v3.342h.87v-3.342h-.87zm-7.828 0h-.87v3.342h.87v-3.342zm9.568 0v3.342h.87v-3.342h-.87z"/>
-                    </svg>
-                  </div>
-                  <span>Netlify</span>
-                </div>
               </div>
               
               <div className="deployment-explanation">
                 <div className="explanation-card">
-                  <h5>Arquitectura de Despliegue Separada</h5>
+                  <h5>Arquitectura de Despliegue en Railway</h5>
                   <p>
-                    Hemos optado por desplegar el frontend y backend en plataformas diferentes para 
-                    optimizar el ciclo de desarrollo y deployment:
+                    Hemos optado por desplegar tanto el frontend como el backend en Railway 
+                    dentro de un mismo proyecto, simplificando la gestión y el ciclo de deployment:
                   </p>
                   <ul>
                     <li>
-                      <strong>Backend en Railway:</strong> Ideal para aplicaciones Node.js con MongoDB, 
-                      ofrece despliegues automáticos y manejo de variables de entorno seguras.
+                      <strong>Backend en Railway:</strong> Aplicación Node.js con MongoDB desplegada 
+                      directamente en Railway, con despliegues automáticos y manejo seguro de 
+                      variables de entorno.
                     </li>
                     <li>
-                      <strong>Frontend en Netlify:</strong> Especializado en aplicaciones React con 
-                      CDN global, previews automáticos y despliegues instantáneos.
+                      <strong>Frontend en Railway:</strong> La aplicación React se sirve desde el 
+                      mismo proyecto en Railway, manteniendo todo el stack unificado en una 
+                      sola plataforma.
                     </li>
                     <li>
-                      <strong>Ventaja principal:</strong> Al separar los repositorios, evitamos 
-                      recargas completas del servidor en cada commit. Cada parte del stack se 
-                      despliega independientemente, mejorando tiempos de deployment y permitiendo 
-                      rollbacks selectivos.
+                      <strong>Ventaja principal:</strong> Al centralizar todo en un mismo proyecto 
+                      de Railway, simplificamos la configuración de red interna, las variables de 
+                      entorno compartidas y el monitoreo, facilitando el mantenimiento y los 
+                      despliegues del stack completo.
                     </li>
                   </ul>
                 </div>
@@ -513,13 +543,13 @@ function LandingPage() {
                 <h3>Acceso Completo a Música</h3>
                 <p>
                   Integración directa con la <strong>API de Spotify</strong> para acceder a millones 
-                  de canciones. En caso de fallas, contamos con un repositorio local en 
-                  <strong> Cloudinary</strong> con una selección curada de canciones para garantizar 
-                  que siempre puedas disfrutar de música.
+                  de canciones. En caso de fallas, contamos con respaldo mediante la 
+                  <strong> YouTube Data API</strong> para garantizar que siempre puedas 
+                  disfrutar de música sin interrupciones.
                 </p>
                 <div className="benefit-badges">
                   <span className="badge">Spotify API</span>
-                  <span className="badge">Cloudinary Backup</span>
+                  <span className="badge">YouTube Data API</span>
                   <span className="badge">Streaming 24/7</span>
                 </div>
               </div>
@@ -537,23 +567,23 @@ function LandingPage() {
               <div className="benefit-text">
                 <h3>Conoce Tu Impacto Musical</h3>
                 <p>
-                  Visualiza tu influencia en la plataforma mediante <strong>grafos interactivos</strong>. 
-                  Descubre conexiones entre tus géneros favoritos, artistas y grupos musicales. 
-                  Nuestro sistema de grafos mapea tus preferencias y te muestra cómo se relacionan 
-                  con otros usuarios y tendencias.
+                  Visualiza tu actividad en la plataforma mediante <strong>grafos interactivos</strong>. 
+                  Descubre tus canciones favoritas, artistas y grupos más escuchados, y 
+                  realiza un seguimiento de tus canciones más frecuentes del mes. 
+                  Nuestro sistema mapea tus hábitos musicales en tiempo real.
                 </p>
                 <div className="analytics-stats">
                   <div className="stat-item">
-                    <div className="stat-icon">🎵</div>
-                    <span>Géneros Explorados</span>
+                    <div className="stat-icon">❤️</div>
+                    <span>Canciones Favoritas</span>
                   </div>
                   <div className="stat-item">
                     <div className="stat-icon">🎤</div>
-                    <span>Artistas Favoritos</span>
+                    <span>Artistas y Grupos</span>
                   </div>
                   <div className="stat-item">
-                    <div className="stat-icon">👥</div>
-                    <span>Grupos Seguidos</span>
+                    <div className="stat-icon">🔥</div>
+                    <span>Más Escuchadas del Mes</span>
                   </div>
                 </div>
               </div>
@@ -582,9 +612,9 @@ function LandingPage() {
               <div className="benefit-text full-width">
                 <h3>Generador de Grafos Personalizado</h3>
                 <p>
-                  Crea visualizaciones únicas basadas en tus criterios. Genera grafos dinámicos 
-                  que muestren relaciones entre artistas, géneros o tus canciones más escuchadas. 
-                  Una herramienta poderosa para entender tus patrones musicales.
+                  Crea visualizaciones únicas basadas en tus estadísticas. Genera grafos dinámicos 
+                  que muestren tus canciones más reproducidas, artistas con mayor presencia 
+                  y álbumes más escuchados. Una herramienta poderosa para entender tus patrones musicales.
                 </p>
               </div>
             </div>
@@ -595,9 +625,18 @@ function LandingPage() {
               <div className="generator-controls">
                 <button className="graph-btn active">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 18V5l12-2v13"/>
+                    <circle cx="6" cy="18" r="3"/>
+                    <circle cx="18" cy="16" r="3"/>
+                  </svg>
+                  <span>Canciones Top</span>
+                </button>
+                
+                <button className="graph-btn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
                   </svg>
-                  <span>Por Artistas</span>
+                  <span>Artistas Top</span>
                 </button>
                 
                 <button className="graph-btn">
@@ -607,16 +646,7 @@ function LandingPage() {
                     <rect x="3" y="14" width="7" height="7"/>
                     <rect x="14" y="14" width="7" height="7"/>
                   </svg>
-                  <span>Por Géneros</span>
-                </button>
-                
-                <button className="graph-btn">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 18V5l12-2v13"/>
-                    <circle cx="6" cy="18" r="3"/>
-                    <circle cx="18" cy="16" r="3"/>
-                  </svg>
-                  <span>Canciones Top</span>
+                  <span>Álbumes Top</span>
                 </button>
               </div>
 
@@ -773,7 +803,7 @@ function LandingPage() {
               <div className="university-card">
                 <div className="university-logo-wrapper">
                   <div className="university-logo-container">
-                    <img src="./src/assets/Logo_UAO.png" alt="Universidad Autónoma de Occidente" />
+                    <img src="../src/assets/Logo_UAO.png" alt="Universidad Autónoma de Occidente" />
                   </div>
                   <h3 className="university-name">Universidad Autónoma de Occidente</h3>
                   <p className="university-motto">Transformación con conocimiento</p>

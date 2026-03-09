@@ -43,6 +43,7 @@ function Reproductor() {
   const [showMisCanciones, setShowMisCanciones] = useState(false);
   const [favTracks, setFavTracks]             = useState([]);
 
+  // ─── Refs ─────────────────────────────────────────────────────────────────────
   const ytPlayerRef      = useRef(null);
   const ytContainerRef   = useRef(null);
   const ytReadyRef       = useRef(false);
@@ -54,7 +55,44 @@ function Reproductor() {
   const favTracksRef     = useRef([]);
   const currentTrackRef  = useRef(null);
   const resultsRef       = useRef(null);
+  const playerBarRef     = useRef(null);   // ← ref directo al player bar
 
+  // ─── Gestos táctiles (swipe para cambiar canción) ────────────────────────────
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+
+  useEffect(() => {
+    const playerBar = playerBarRef.current;
+    if (!playerBar) return;
+
+    const onTouchStart = (e) => {
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
+    };
+
+    const onTouchEnd = (e) => {
+      if (touchStartX.current === null) return;
+      const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+      const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
+
+      if (Math.abs(deltaX) > 60 && deltaY < 40) {
+        if (deltaX < 0) playNext();
+        else            playPrev();
+      }
+      touchStartX.current = null;
+      touchStartY.current = null;
+    };
+
+    playerBar.addEventListener('touchstart', onTouchStart, { passive: true });
+    playerBar.addEventListener('touchend',   onTouchEnd,   { passive: true });
+
+    return () => {
+      playerBar.removeEventListener('touchstart', onTouchStart);
+      playerBar.removeEventListener('touchend',   onTouchEnd);
+    };
+  }, [currentTrack, tracks, artistTracks, userTracks, favTracks]);
+
+  // ─── Sync refs ───────────────────────────────────────────────────────────────
   const handleArtistTracksLoaded = (t) => {
     setArtistTracks(t);
     setTopArtist(prev => prev ? { ...prev, totalTracks: t.length } : prev);
@@ -101,6 +139,7 @@ function Reproductor() {
     };
   }, []);
 
+  // ─── Carga de canciones ───────────────────────────────────────────────────────
   const loadFeaturedTracks = async () => {
     try {
       setTracksLoading(true);
@@ -172,6 +211,7 @@ function Reproductor() {
     }, 500);
   };
 
+  // ─── YouTube ──────────────────────────────────────────────────────────────────
   const startProgressTracking = () => {
     clearInterval(progressInterval.current);
     progressInterval.current = setInterval(() => {
@@ -251,6 +291,7 @@ function Reproductor() {
     });
   };
 
+  // ─── Reproducción ─────────────────────────────────────────────────────────────
   const playTrackInternal = async (track) => {
     setCurrentTrack(track);
     setIsPlaying(false);
@@ -340,7 +381,7 @@ function Reproductor() {
     navigate('/auth');
   };
 
-  // ── Pantallas especiales ─────────────────────────────────────────────────────
+  // ── Pantallas especiales ──────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="reproductor-loading">
@@ -382,7 +423,7 @@ function Reproductor() {
     );
   }
 
-  // ── Vista activa ─────────────────────────────────────────────────────────────
+  // ── Vista activa ──────────────────────────────────────────────────────────────
   const renderContent = () => {
     if (showMisCanciones) return (
       <MisCanciones
@@ -540,6 +581,7 @@ function Reproductor() {
     );
   };
 
+  // ── Render principal ──────────────────────────────────────────────────────────
   return (
     <div className="reproductor-page">
 
@@ -611,21 +653,28 @@ function Reproductor() {
 
       {/* ── Player bar ── */}
       {currentTrack && (
-        <div className="player-bar">
+        <div className="player-bar" ref={playerBarRef}>
+
+          {/* Fila 1 col 1: Info de la canción */}
           <div className="player-track-info">
             {currentTrack.albumImage && (
               <img src={currentTrack.albumImage} alt="cover" className="player-cover" />
             )}
-            <div>
+            <div className="player-track-text">
               <p className="player-track-name">{currentTrack.name}</p>
               <p className="player-track-artist">{currentTrack.artist}</p>
             </div>
           </div>
 
+          {/* Fila 1 col 2 (desktop: centro) / col derecha (móvil): controles */}
           <div className="player-controls">
-            <button className="ctrl-btn" onClick={playPrev} disabled={youtubeLoading}>
+
+            {/* Anterior — oculto en móvil */}
+            <button className="ctrl-btn skip-btn" onClick={playPrev} disabled={youtubeLoading}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
             </button>
+
+            {/* Play / Pausa */}
             <button className="ctrl-btn play-pause" onClick={togglePlay} disabled={youtubeLoading}>
               {youtubeLoading ? (
                 <svg viewBox="0 0 50 50" width="22" height="22">
@@ -639,41 +688,49 @@ function Reproductor() {
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
               )}
             </button>
-            <button className="ctrl-btn" onClick={playNext} disabled={youtubeLoading}>
+
+            {/* Siguiente — oculto en móvil */}
+            <button className="ctrl-btn skip-btn" onClick={playNext} disabled={youtubeLoading}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
             </button>
-            <div className="progress-section">
-              <span className="time-label">{formatTime(currentTime)}</span>
-              <input type="range" min="0" max={duration || 100} step="1" value={currentTime} onChange={handleSeek} className="progress-bar" />
-              <span className="time-label">{formatTime(duration)}</span>
-            </div>
-          </div>
 
-          {/* Volumen + corazón */}
-          <div className="player-volume">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
-            </svg>
-            <input type="range" min="0" max="100" step="5" value={volume} onChange={handleVolume} className="volume-bar" />
-
+            {/* Corazón — siempre visible (desktop y móvil) */}
             <button
               className={`heart-btn ${isFavorite ? 'heart-btn--active' : ''}`}
               onClick={handleToggleFavorite}
               disabled={favoriteLoading}
               title={isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
             >
-              <svg
-                viewBox="0 0 24 24"
-                fill={isFavorite ? 'currentColor' : 'none'}
-                stroke="currentColor"
-                strokeWidth="2"
-                width="20"
-                height="20"
-              >
+              <svg viewBox="0 0 24 24" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" width="20" height="20">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
               </svg>
             </button>
+
+            {/* Barra de progreso — oculta en móvil */}
+            <div className="progress-section">
+              <span className="time-label">{formatTime(currentTime)}</span>
+              <input
+                type="range"
+                min="0"
+                max={duration || 100}
+                step="1"
+                value={currentTime}
+                onChange={handleSeek}
+                className="progress-bar"
+              />
+              <span className="time-label">{formatTime(duration)}</span>
+            </div>
+
           </div>
+
+          {/* Volumen — solo desktop */}
+          <div className="player-volume">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+            </svg>
+            <input type="range" min="0" max="100" step="5" value={volume} onChange={handleVolume} className="volume-bar" />
+          </div>
+
         </div>
       )}
     </div>
