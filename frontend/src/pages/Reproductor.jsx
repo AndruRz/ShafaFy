@@ -244,11 +244,22 @@ function Reproductor() {
         const vol = volume;
         ytPlayerRef.current = new window.YT.Player('yt-player-inner', {
           height: '1', width: '1', videoId,
-          playerVars: { autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1, rel: 0, fs: 0, playsinline: 1 },
+          playerVars: { autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1, rel: 0, fs: 0, playsinline: 1, mute: 1 },
           events: {
             onReady: (event) => {
+              // Safari requiere que el video empiece muteado para permitir autoplay
+              event.target.mute();
               event.target.setVolume(vol);
               event.target.playVideo();
+
+              // Desmutear luego de que Safari haya permitido la reproducción
+              setTimeout(() => {
+                try {
+                  event.target.unMute();
+                  event.target.setVolume(vol);
+                } catch (_) {}
+              }, 800);
+
               setIsPlaying(true);
               setCurrentTime(0);
               startProgressTracking();
@@ -290,7 +301,7 @@ function Reproductor() {
       waitForYT();
     });
   };
-
+  
   // ─── Reproducción ─────────────────────────────────────────────────────────────
   const playTrackInternal = async (track) => {
     setCurrentTrack(track);
