@@ -757,3 +757,41 @@
   cursor: not-allowed;
   transform: none;
 }
+
+/* ================================
+   ANIMACIÓN CAMBIO DE CANCIÓN (móvil)
+   ================================ */
+.player-track-info {
+  /* ya existe, solo asegúrate que tenga esto */
+  overflow: hidden;
+}
+
+.player-track-info.slide-in-right {
+  animation: slideInFromRight 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+.player-track-info.slide-in-left {
+  animation: slideInFromLeft 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}

@@ -38,10 +38,14 @@ function Reproductor() {
   const [userTracks, setUserTracks]           = useState([]);
 
   // ─── Favoritos ───────────────────────────────────────────────────────────────
-  const [isFavorite, setIsFavorite]           = useState(false);
-  const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [isFavorite, setIsFavorite]             = useState(false);
+  const [favoriteLoading, setFavoriteLoading]   = useState(false);
   const [showMisCanciones, setShowMisCanciones] = useState(false);
-  const [favTracks, setFavTracks]             = useState([]);
+  const [favTracks, setFavTracks]               = useState([]);
+
+  // ─── Animación slide (cambio de canción en móvil) ────────────────────────────
+  const [slideDirection, setSlideDirection] = useState('');
+  const slideTimeout                        = useRef(null);
 
   // ─── Refs ─────────────────────────────────────────────────────────────────────
   const ytPlayerRef      = useRef(null);
@@ -55,11 +59,20 @@ function Reproductor() {
   const favTracksRef     = useRef([]);
   const currentTrackRef  = useRef(null);
   const resultsRef       = useRef(null);
-  const playerBarRef     = useRef(null);   // ← ref directo al player bar
+  const playerBarRef     = useRef(null);
 
   // ─── Gestos táctiles (swipe para cambiar canción) ────────────────────────────
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
+
+  // ─── Helper: dispara animación slide ─────────────────────────────────────────
+  const triggerSlide = (direction) => {
+    setSlideDirection('');
+    clearTimeout(slideTimeout.current);
+    slideTimeout.current = setTimeout(() => {
+      setSlideDirection(direction);
+    }, 10);
+  };
 
   useEffect(() => {
     const playerBar = playerBarRef.current;
@@ -76,6 +89,7 @@ function Reproductor() {
       const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
 
       if (Math.abs(deltaX) > 60 && deltaY < 40) {
+        // playNext / playPrev ya llaman triggerSlide internamente
         if (deltaX < 0) playNext();
         else            playPrev();
       }
@@ -91,6 +105,11 @@ function Reproductor() {
       playerBar.removeEventListener('touchend',   onTouchEnd);
     };
   }, [currentTrack, tracks, artistTracks, userTracks, favTracks]);
+
+  // ─── Limpiar slideTimeout al desmontar ───────────────────────────────────────
+  useEffect(() => {
+    return () => clearTimeout(slideTimeout.current);
+  }, []);
 
   // ─── Sync refs ───────────────────────────────────────────────────────────────
   const handleArtistTracksLoaded = (t) => {
@@ -247,12 +266,10 @@ function Reproductor() {
           playerVars: { autoplay: 1, controls: 0, disablekb: 1, modestbranding: 1, rel: 0, fs: 0, playsinline: 1, mute: 1 },
           events: {
             onReady: (event) => {
-              // Safari requiere que el video empiece muteado para permitir autoplay
               event.target.mute();
               event.target.setVolume(vol);
               event.target.playVideo();
 
-              // Desmutear luego de que Safari haya permitido la reproducción
               setTimeout(() => {
                 try {
                   event.target.unMute();
@@ -285,7 +302,11 @@ function Reproductor() {
                 if (!ct || activeList.length === 0) return;
                 const idx  = activeList.findIndex(t => t.id === ct.id);
                 const next = activeList[(idx + 1) % activeList.length];
-                if (next) playTrackInternal(next);
+                // Auto-avance: animar hacia la derecha (siguiente)
+                if (next) {
+                  triggerSlide('slide-in-right');
+                  playTrackInternal(next);
+                }
               }
             },
             onError: () => {
@@ -301,7 +322,7 @@ function Reproductor() {
       waitForYT();
     });
   };
-  
+
   // ─── Reproducción ─────────────────────────────────────────────────────────────
   const playTrackInternal = async (track) => {
     setCurrentTrack(track);
@@ -356,9 +377,11 @@ function Reproductor() {
     return tracks;
   };
 
+  // ─── Siguiente / Anterior con animación ──────────────────────────────────────
   const playNext = () => {
     const list = getActiveList();
     if (!currentTrack || list.length === 0) return;
+    triggerSlide('slide-in-right');
     const idx = list.findIndex(t => t.id === currentTrack.id);
     playTrack(list[(idx + 1) % list.length]);
   };
@@ -366,6 +389,7 @@ function Reproductor() {
   const playPrev = () => {
     const list = getActiveList();
     if (!currentTrack || list.length === 0) return;
+    triggerSlide('slide-in-left');
     const idx = list.findIndex(t => t.id === currentTrack.id);
     playTrack(list[(idx - 1 + list.length) % list.length]);
   };
@@ -668,8 +692,10 @@ function Reproductor() {
       {currentTrack && (
         <div className="player-bar" ref={playerBarRef}>
 
-          {/* Fila 1 col 1: Info de la canción */}
-          <div className="player-track-info">
+          {/* Fila 1 col 1: Info de la canción — con clase de animación slide */}
+          <div className={`player-track-info ${slideDirection}`}
+            onAnimationEnd={() => setSlideDirection('')}
+          >
             {currentTrack.albumImage && (
               <img src={currentTrack.albumImage} alt="cover" className="player-cover" />
             )}
@@ -707,7 +733,7 @@ function Reproductor() {
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
             </button>
 
-            {/* Corazón — siempre visible (desktop y móvil) */}
+            {/* Corazón — siempre visible */}
             <button
               className={`heart-btn ${isFavorite ? 'heart-btn--active' : ''}`}
               onClick={handleToggleFavorite}
