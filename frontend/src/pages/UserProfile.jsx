@@ -1,7 +1,7 @@
-// src/components/UserProfile.jsx
+// src/pages/UserProfile.jsx
 import { useState, useEffect } from 'react';
 import historyService from '../services/historyService';
-import './UserProfile.css';
+import './css/UserProfile.css';
 
 const MONTH_NAMES = [
   'Enero','Febrero','Marzo','Abril','Mayo','Junio',

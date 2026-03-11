@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import './Reproductor_Movil.css';
+import './css/Reproductor_Movil.css';
 
 function Reproductor_Movil({
   currentTrack,

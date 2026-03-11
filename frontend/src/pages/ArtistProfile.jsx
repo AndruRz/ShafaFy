@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import spotifyService from '../services/spotifyService';
-import './ArtistProfile.css';
+import './css/ArtistProfile.css';
 
 function ArtistProfile({ artistId, onClose, onPlayTrack, onTracksLoaded, currentTrack, isPlaying, youtubeLoading, fallbackTracks = [] }) {
   const [profileData, setProfileData] = useState(null);

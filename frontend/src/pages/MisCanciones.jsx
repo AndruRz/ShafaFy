@@ -1,7 +1,7 @@
-// src/components/MisCanciones.jsx
+// src/pages/MisCanciones.jsx
 import { useState, useEffect } from 'react';
 import favoritesService from '../services/favoritesService';
-import './MisCanciones.css';
+import './css/MisCanciones.css';
 
 const getTimeLabel = (savedAt) => {
   const now      = new Date();

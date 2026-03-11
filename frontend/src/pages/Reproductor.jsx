@@ -8,7 +8,9 @@ import ArtistProfile from './ArtistProfile';
 import UserProfile from './UserProfile';
 import MisCanciones from './MisCanciones';
 import Reproductor_Movil from './Reproductor_Movil';
-import './Reproductor.css';
+import { HistoryStack, PlayQueue } from '../data_structures/EstructurasLineales';
+import { fetchFeaturedTracks, searchTracksAndArtists } from '../data_structures/HashTablesTries';
+import './css/Reproductor.css';
 
 function Reproductor() {
   const location = useLocation();
@@ -66,6 +68,10 @@ function Reproductor() {
   const resultsRef       = useRef(null);
   const playerBarRef     = useRef(null);
 
+  // ─── Estructuras lineales: Pila (historial) + Cola (reproducción) ─────────────
+  const historyStack = useRef(new HistoryStack());
+  const playQueue    = useRef(new PlayQueue());
+
   // ─── Gestos táctiles (swipe para cambiar canción) ────────────────────────────
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
@@ -120,7 +126,7 @@ function Reproductor() {
 
   useEffect(() => { return () => clearTimeout(slideTimeout.current); }, []);
 
-  // ─── Sync refs ───────────────────────────────────────────────────────────────
+  // ─── Sync refs + cargar cola según lista activa ───────────────────────────────
   const handleArtistTracksLoaded = (t) => {
     setArtistTracks(t);
     setTopArtist(prev => prev ? { ...prev, totalTracks: t.length } : prev);
@@ -128,10 +134,38 @@ function Reproductor() {
   const handleUserTracksLoaded = (t) => setUserTracks(t);
   const handleFavTracksLoaded  = (t) => setFavTracks(t);
 
-  useEffect(() => { tracksRef.current       = tracks;       }, [tracks]);
-  useEffect(() => { artistTracksRef.current = artistTracks; }, [artistTracks]);
-  useEffect(() => { userTracksRef.current   = userTracks;   }, [userTracks]);
-  useEffect(() => { favTracksRef.current    = favTracks;    }, [favTracks]);
+  useEffect(() => {
+    tracksRef.current = tracks;
+    // Solo usar tracks generales si no hay ninguna otra lista activa
+    if (favTracks.length === 0 && userTracks.length === 0 && artistTracks.length === 0) {
+      playQueue.current.loadTracks(tracks);
+    }
+  }, [tracks]);
+
+  useEffect(() => {
+    artistTracksRef.current = artistTracks;
+    if (artistTracks.length > 0) {
+      playQueue.current.loadTracks(artistTracks);
+      historyStack.current.clear();
+    }
+  }, [artistTracks]);
+
+  useEffect(() => {
+    userTracksRef.current = userTracks;
+    if (userTracks.length > 0) {
+      playQueue.current.loadTracks(userTracks);
+      historyStack.current.clear();
+    }
+  }, [userTracks]);
+
+  useEffect(() => {
+    favTracksRef.current = favTracks;
+    if (favTracks.length > 0) {
+      playQueue.current.loadTracks(favTracks);
+      historyStack.current.clear();
+    }
+  }, [favTracks]);
+
   useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
 
   useEffect(() => {
@@ -167,13 +201,14 @@ function Reproductor() {
     };
   }, []);
 
-  // ─── Carga de canciones ───────────────────────────────────────────────────────
+  // ─── Carga de canciones destacadas → delegado a HashTablesTries ──────────────
   const loadFeaturedTracks = async () => {
     try {
       setTracksLoading(true);
       setError('');
       setTopArtist(null);
-      const data = await spotifyService.getFeatured();
+      historyStack.current.clear();
+      const data = await fetchFeaturedTracks(spotifyService);
       setTracks(data);
     } catch {
       setError('No se pudieron cargar las canciones. Intenta de nuevo.');
@@ -182,6 +217,7 @@ function Reproductor() {
     }
   };
 
+  // ─── Búsqueda de canciones y artistas → delegado a HashTablesTries ───────────
   const handleSearch = (e) => {
     const value = e.target.value;
     setSearchQuery(value);
@@ -202,35 +238,13 @@ function Reproductor() {
         setError('');
         setSelectedArtist(null);
 
-        const [trackResults, artistResults] = await Promise.all([
-          spotifyService.search(value),
-          spotifyService.searchArtists(value),
-        ]);
+        const { tracks: trackResults, topArtist, searchArtistTracks } =
+          await searchTracksAndArtists(value, spotifyService);
 
         setTracks(trackResults);
+        setTopArtist(topArtist);
+        setSearchArtistTracks(searchArtistTracks);
         if (resultsRef.current) resultsRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-
-        if (artistResults?.length > 0) {
-          const top = artistResults[0];
-          const nameMatch =
-            top.name.toLowerCase().includes(value.toLowerCase()) ||
-            value.toLowerCase().includes(top.name.toLowerCase().split(' ')[0]);
-          if (nameMatch) {
-            setTopArtist(top);
-            const aLow = top.name.toLowerCase();
-            const filtered = trackResults.filter(t =>
-              t.artist.toLowerCase().includes(aLow) ||
-              aLow.includes(t.artist.toLowerCase().split(',')[0].trim())
-            );
-            setSearchArtistTracks(filtered.length > 0 ? filtered : trackResults);
-          } else {
-            setTopArtist(null);
-            setSearchArtistTracks([]);
-          }
-        } else {
-          setTopArtist(null);
-          setSearchArtistTracks([]);
-        }
       } catch {
         setError('Error al buscar canciones.');
       } finally {
@@ -295,17 +309,13 @@ function Reproductor() {
                 setIsPlaying(false);
                 clearInterval(progressInterval.current);
               } else if (event.data === YTS.ENDED) {
+                // ── Cuando la canción termina sola: avanzar con la Cola ──
                 setIsPlaying(false);
                 clearInterval(progressInterval.current);
-                const activeList =
-                  favTracksRef.current.length    > 0 ? favTracksRef.current    :
-                  userTracksRef.current.length   > 0 ? userTracksRef.current   :
-                  artistTracksRef.current.length > 0 ? artistTracksRef.current :
-                  tracksRef.current;
                 const ct = currentTrackRef.current;
-                if (!ct || activeList.length === 0) return;
-                const idx  = activeList.findIndex(t => t.id === ct.id);
-                const next = activeList[(idx + 1) % activeList.length];
+                if (!ct || playQueue.current.isEmpty()) return;
+                historyStack.current.push(ct);
+                const next = playQueue.current.getNext(ct.id);
                 if (next) {
                   triggerSlide('slide-in-right');
                   playTrackInternal(next);
@@ -352,6 +362,8 @@ function Reproductor() {
 
   const playTrack = async (track) => {
     if (currentTrack?.id === track.id) { togglePlay(); return; }
+    // Guardar la canción actual en el historial antes de cambiar
+    if (currentTrack) historyStack.current.push(currentTrack);
     await playTrackInternal(track);
   };
 
@@ -373,27 +385,28 @@ function Reproductor() {
     finally { setFavoriteLoading(false); }
   };
 
-  const getActiveList = () => {
-    if (favTracks.length    > 0) return favTracks;
-    if (userTracks.length   > 0) return userTracks;
-    if (artistTracks.length > 0) return artistTracks;
-    return tracks;
-  };
-
+  // ─── Siguiente / Anterior usando Cola + Pila ──────────────────────────────────
   const playNext = () => {
-    const list = getActiveList();
-    if (!currentTrack || list.length === 0) return;
+    if (!currentTrack || playQueue.current.isEmpty()) return;
+    // Guardar la canción actual en la pila de historial
+    historyStack.current.push(currentTrack);
     triggerSlide('slide-in-right');
-    const idx = list.findIndex(t => t.id === currentTrack.id);
-    playTrack(list[(idx + 1) % list.length]);
+    const next = playQueue.current.getNext(currentTrack.id);
+    if (next) playTrack(next);
   };
 
   const playPrev = () => {
-    const list = getActiveList();
-    if (!currentTrack || list.length === 0) return;
+    if (!currentTrack) return;
     triggerSlide('slide-in-left');
-    const idx = list.findIndex(t => t.id === currentTrack.id);
-    playTrack(list[(idx - 1 + list.length) % list.length]);
+    // Si hay historial real en la pila, retroceder a la canción anterior real
+    if (!historyStack.current.isEmpty()) {
+      const prev = historyStack.current.pop();
+      if (prev) playTrackInternal(prev);
+      return;
+    }
+    // Si no hay historial, retroceder en la cola de forma circular
+    const prev = playQueue.current.getPrev(currentTrack.id);
+    if (prev) playTrackInternal(prev);
   };
 
   const handleSeek = (e) => {

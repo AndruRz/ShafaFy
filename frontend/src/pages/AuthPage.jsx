@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
-import './AuthPage.css';
+import './css/AuthPage.css';
 
 function AuthPage() {
   const navigate = useNavigate();
