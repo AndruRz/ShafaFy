@@ -7,6 +7,7 @@ import favoritesService from '../services/favoritesService';
 import ArtistProfile from './ArtistProfile';
 import UserProfile from './UserProfile';
 import MisCanciones from './MisCanciones';
+import Reproductor_Movil from './Reproductor_Movil';
 import './Reproductor.css';
 
 function Reproductor() {
@@ -43,7 +44,11 @@ function Reproductor() {
   const [showMisCanciones, setShowMisCanciones] = useState(false);
   const [favTracks, setFavTracks]               = useState([]);
 
-  // ─── Animación slide (cambio de canción en móvil) ────────────────────────────
+  // ─── Reproductor móvil pantalla completa ─────────────────────────────────────
+  const [showMobilePlayer, setShowMobilePlayer] = useState(false);
+  const lastTapRef                              = useRef(0);
+
+  // ─── Animación slide ─────────────────────────────────────────────────────────
   const [slideDirection, setSlideDirection] = useState('');
   const slideTimeout                        = useRef(null);
 
@@ -69,9 +74,17 @@ function Reproductor() {
   const triggerSlide = (direction) => {
     setSlideDirection('');
     clearTimeout(slideTimeout.current);
-    slideTimeout.current = setTimeout(() => {
-      setSlideDirection(direction);
-    }, 10);
+    slideTimeout.current = setTimeout(() => setSlideDirection(direction), 10);
+  };
+
+  // ─── Doble tap en portada → abre reproductor móvil ───────────────────────────
+  const handleCoverDoubleTap = (e) => {
+    e.preventDefault();
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      setShowMobilePlayer(true);
+    }
+    lastTapRef.current = now;
   };
 
   useEffect(() => {
@@ -89,7 +102,6 @@ function Reproductor() {
       const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
 
       if (Math.abs(deltaX) > 60 && deltaY < 40) {
-        // playNext / playPrev ya llaman triggerSlide internamente
         if (deltaX < 0) playNext();
         else            playPrev();
       }
@@ -106,10 +118,7 @@ function Reproductor() {
     };
   }, [currentTrack, tracks, artistTracks, userTracks, favTracks]);
 
-  // ─── Limpiar slideTimeout al desmontar ───────────────────────────────────────
-  useEffect(() => {
-    return () => clearTimeout(slideTimeout.current);
-  }, []);
+  useEffect(() => { return () => clearTimeout(slideTimeout.current); }, []);
 
   // ─── Sync refs ───────────────────────────────────────────────────────────────
   const handleArtistTracksLoaded = (t) => {
@@ -269,14 +278,9 @@ function Reproductor() {
               event.target.mute();
               event.target.setVolume(vol);
               event.target.playVideo();
-
               setTimeout(() => {
-                try {
-                  event.target.unMute();
-                  event.target.setVolume(vol);
-                } catch (_) {}
+                try { event.target.unMute(); event.target.setVolume(vol); } catch (_) {}
               }, 800);
-
               setIsPlaying(true);
               setCurrentTime(0);
               startProgressTracking();
@@ -302,7 +306,6 @@ function Reproductor() {
                 if (!ct || activeList.length === 0) return;
                 const idx  = activeList.findIndex(t => t.id === ct.id);
                 const next = activeList[(idx + 1) % activeList.length];
-                // Auto-avance: animar hacia la derecha (siguiente)
                 if (next) {
                   triggerSlide('slide-in-right');
                   playTrackInternal(next);
@@ -377,7 +380,6 @@ function Reproductor() {
     return tracks;
   };
 
-  // ─── Siguiente / Anterior con animación ──────────────────────────────────────
   const playNext = () => {
     const list = getActiveList();
     if (!currentTrack || list.length === 0) return;
@@ -624,6 +626,25 @@ function Reproductor() {
 
       <div ref={ytContainerRef} style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: '1px', height: '1px', overflow: 'hidden' }} />
 
+      {/* ── Reproductor móvil pantalla completa ── */}
+      {showMobilePlayer && currentTrack && (
+        <Reproductor_Movil
+          currentTrack={currentTrack}
+          isPlaying={isPlaying}
+          isFavorite={isFavorite}
+          favoriteLoading={favoriteLoading}
+          currentTime={currentTime}
+          duration={duration}
+          youtubeLoading={youtubeLoading}
+          onClose={() => setShowMobilePlayer(false)}
+          onPlay={togglePlay}
+          onNext={playNext}
+          onPrev={playPrev}
+          onSeek={handleSeek}
+          onFavorite={handleToggleFavorite}
+        />
+      )}
+
       {/* ── Header ── */}
       <header className="reproductor-header">
         <div className="header-logo">
@@ -641,7 +662,6 @@ function Reproductor() {
           />
         </div>
         <div className="header-user">
-          {/* Botón Mis Canciones */}
           <button
             className={`mis-canciones-btn ${showMisCanciones ? 'active' : ''}`}
             onClick={() => {
@@ -657,7 +677,6 @@ function Reproductor() {
             </svg>
           </button>
 
-          {/* Avatar → perfil */}
           <div
             className={`user-avatar ${showUserProfile ? 'user-avatar--active' : ''}`}
             onClick={() => {
@@ -692,12 +711,19 @@ function Reproductor() {
       {currentTrack && (
         <div className="player-bar" ref={playerBarRef}>
 
-          {/* Fila 1 col 1: Info de la canción — con clase de animación slide */}
-          <div className={`player-track-info ${slideDirection}`}
+          {/* Info canción — doble tap en portada abre reproductor móvil */}
+          <div
+            className={`player-track-info ${slideDirection}`}
             onAnimationEnd={() => setSlideDirection('')}
           >
             {currentTrack.albumImage && (
-              <img src={currentTrack.albumImage} alt="cover" className="player-cover" />
+              <img
+                src={currentTrack.albumImage}
+                alt="cover"
+                className="player-cover"
+                onTouchEnd={handleCoverDoubleTap}
+                style={{ cursor: 'pointer' }}
+              />
             )}
             <div className="player-track-text">
               <p className="player-track-name">{currentTrack.name}</p>
@@ -705,15 +731,12 @@ function Reproductor() {
             </div>
           </div>
 
-          {/* Fila 1 col 2 (desktop: centro) / col derecha (móvil): controles */}
+          {/* Controles */}
           <div className="player-controls">
-
-            {/* Anterior — oculto en móvil */}
             <button className="ctrl-btn skip-btn" onClick={playPrev} disabled={youtubeLoading}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
             </button>
 
-            {/* Play / Pausa */}
             <button className="ctrl-btn play-pause" onClick={togglePlay} disabled={youtubeLoading}>
               {youtubeLoading ? (
                 <svg viewBox="0 0 50 50" width="22" height="22">
@@ -728,12 +751,10 @@ function Reproductor() {
               )}
             </button>
 
-            {/* Siguiente — oculto en móvil */}
             <button className="ctrl-btn skip-btn" onClick={playNext} disabled={youtubeLoading}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
             </button>
 
-            {/* Corazón — siempre visible */}
             <button
               className={`heart-btn ${isFavorite ? 'heart-btn--active' : ''}`}
               onClick={handleToggleFavorite}
@@ -745,7 +766,6 @@ function Reproductor() {
               </svg>
             </button>
 
-            {/* Barra de progreso — oculta en móvil */}
             <div className="progress-section">
               <span className="time-label">{formatTime(currentTime)}</span>
               <input
@@ -759,7 +779,6 @@ function Reproductor() {
               />
               <span className="time-label">{formatTime(duration)}</span>
             </div>
-
           </div>
 
           {/* Volumen — solo desktop */}
