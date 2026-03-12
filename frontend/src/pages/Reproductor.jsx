@@ -9,7 +9,7 @@ import UserProfile from './UserProfile';
 import MisCanciones from './MisCanciones';
 import Reproductor_Movil from './Reproductor_Movil';
 import { HistoryStack, PlayQueue } from '../data_structures/EstructurasLineales';
-import { fetchFeaturedTracks, searchTracksAndArtists } from '../data_structures/HashTablesTries';
+import { fetchFeaturedTracks, searchTracksAndArtists, getSuggestions } from '../data_structures/HashTablesTries';
 import './css/Reproductor.css';
 
 function Reproductor() {
@@ -22,6 +22,7 @@ function Reproductor() {
   const [tracks, setTracks]                 = useState([]);
   const [tracksLoading, setTracksLoading]   = useState(false);
   const [searchQuery, setSearchQuery]       = useState('');
+  const [suggestions, setSuggestions]       = useState([]);
   const [currentTrack, setCurrentTrack]     = useState(null);
   const [isPlaying, setIsPlaying]           = useState(false);
   const [currentTime, setCurrentTime]       = useState(0);
@@ -217,10 +218,29 @@ function Reproductor() {
     }
   };
 
-  // ─── Búsqueda de canciones y artistas → delegado a HashTablesTries ───────────
+  // ─── Búsqueda de canciones y artistas → delegado a HashTablesTries (cache + Trie) ─
+  const runSearch = async (query) => {
+    try {
+      setTracksLoading(true);
+      setError('');
+      setSelectedArtist(null);
+      const { tracks: trackResults, topArtist, searchArtistTracks } =
+        await searchTracksAndArtists(query, spotifyService);
+      setTracks(trackResults);
+      setTopArtist(topArtist);
+      setSearchArtistTracks(searchArtistTracks);
+      if (resultsRef.current) resultsRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      setError('Error al buscar canciones.');
+    } finally {
+      setTracksLoading(false);
+    }
+  };
+
   const handleSearch = (e) => {
     const value = e.target.value;
     setSearchQuery(value);
+    setSuggestions(getSuggestions(value));
     clearTimeout(searchTimeout.current);
 
     if (value.trim() === '') {
@@ -232,25 +252,13 @@ function Reproductor() {
       return;
     }
 
-    searchTimeout.current = setTimeout(async () => {
-      try {
-        setTracksLoading(true);
-        setError('');
-        setSelectedArtist(null);
+    searchTimeout.current = setTimeout(() => runSearch(value), 500);
+  };
 
-        const { tracks: trackResults, topArtist, searchArtistTracks } =
-          await searchTracksAndArtists(value, spotifyService);
-
-        setTracks(trackResults);
-        setTopArtist(topArtist);
-        setSearchArtistTracks(searchArtistTracks);
-        if (resultsRef.current) resultsRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-      } catch {
-        setError('Error al buscar canciones.');
-      } finally {
-        setTracksLoading(false);
-      }
-    }, 500);
+  const handleSuggestionClick = (suggestion) => {
+    setSearchQuery(suggestion);
+    setSuggestions([]);
+    runSearch(suggestion);
   };
 
   // ─── YouTube ──────────────────────────────────────────────────────────────────
@@ -663,16 +671,45 @@ function Reproductor() {
         <div className="header-logo">
           <span className="logo-text">Shafa<span className="logo-accent">Fy</span></span>
         </div>
-        <div className="search-bar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-          </svg>
-          <input
-            type="text"
-            placeholder="Buscar canciones, artistas..."
-            value={searchQuery}
-            onChange={handleSearch}
-          />
+        <div className="search-bar-wrapper" style={{ position: 'relative', flex: 1, maxWidth: 500 }}>
+          <div className="search-bar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input
+              type="text"
+              placeholder="Buscar canciones, artistas..."
+              value={searchQuery}
+              onChange={handleSearch}
+            />
+          </div>
+          {suggestions.length > 0 && searchQuery.trim() !== '' && (
+            <ul
+              className="search-suggestions"
+              
+            >
+              {suggestions.map((s, i) => (
+                <li
+                  key={`${s}-${i}`}
+                  onClick={() => handleSuggestionClick(s)}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    cursor: 'pointer',
+                    color: 'var(--color-text)',
+                    fontSize: '0.95rem',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(29, 185, 84, 0.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  {s}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <div className="header-user">
           <button
