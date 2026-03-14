@@ -47,25 +47,67 @@ export class HistoryStack {
 
 /**
  * ─────────────────────────────────────────────────────────────
- *  COLA (Queue) — Cola de reproducción
+ *  COLA (Queue) — Cola de reproducción con contexto activo
  * ─────────────────────────────────────────────────────────────
- *  Permite avanzar por una lista de canciones en orden.
- *  Comportamiento FIFO circular: cuando llega al final vuelve al inicio.
+ *  Maneja múltiples listas de canciones (búsqueda, artista,
+ *  favoritos, perfil de usuario) sin que se mezclen entre sí.
+ *
+ *  El problema raíz: antes no había forma de saber *de dónde*
+ *  venía la canción actual. Al cargar una nueva lista se pisaba
+ *  la cola anterior, causando que next/prev saltara a canciones
+ *  de otra vista.
+ *
+ *  Solución: cada lista tiene un "contexto" con nombre único.
+ *  loadTracks() solo acepta la lista si viene del contexto activo.
+ *  Si cambias de vista, primero llamas setContext() y la pila de
+ *  historial se limpia automáticamente.
+ *
+ *  Contextos disponibles:
+ *    'search'   → resultados de búsqueda / canciones destacadas
+ *    'artist'   → perfil de artista
+ *    'favorites'→ Mis Canciones (favoritos)
+ *    'profile'  → perfil de usuario (top tracks del mes)
  *
  *  Uso en Reproductor:
- *    - loadTracks(tracks) → cuando se carga una nueva lista (búsqueda, artista, favoritos, etc.)
- *    - getNext(currentId) → cuando presionas "siguiente" o la canción termina sola
- *    - getPrev(currentId) → fallback circular cuando no hay historial
+ *    - setContext('artist', historyStack)   → al abrir perfil artista
+ *    - loadTracks(tracks, 'artist')         → al recibir las canciones
+ *    - getNext(currentId)                   → botón siguiente
+ *    - getPrev(currentId)                   → botón anterior (fallback circular)
  * ─────────────────────────────────────────────────────────────
  */
 export class PlayQueue {
   constructor() {
-    this._queue = [];
+    this._queue       = [];
+    this._context     = 'search'; // contexto activo actual
   }
 
-  /** Carga una lista completa de canciones en la cola */
-  loadTracks(tracks = []) {
+  /**
+   * Cambia el contexto activo y limpia el historial.
+   * Llamar ANTES de cargar una nueva lista de canciones.
+   * @param {'search'|'artist'|'favorites'|'profile'} context
+   * @param {HistoryStack} historyStack - referencia a la pila para limpiarla
+   */
+  setContext(context, historyStack) {
+    if (this._context === context) return; // ya estaba en ese contexto, no hacer nada
+    this._context = context;
+    this._queue   = [];
+    if (historyStack) historyStack.clear();
+  }
+
+  /**
+   * Carga una lista de canciones SOLO si el contexto coincide con el activo.
+   * Así evitamos que una lista de favoritos pise la cola de búsqueda.
+   * @param {Array}  tracks
+   * @param {'search'|'artist'|'favorites'|'profile'} context
+   */
+  loadTracks(tracks = [], context) {
+    if (context && context !== this._context) return; // contexto incorrecto → ignorar
     this._queue = [...tracks];
+  }
+
+  /** Retorna el contexto activo actual */
+  getContext() {
+    return this._context;
   }
 
   /** Retorna el índice del siguiente track dado el id actual */

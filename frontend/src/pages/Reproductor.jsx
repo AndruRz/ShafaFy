@@ -88,9 +88,7 @@ function Reproductor() {
   const handleCoverDoubleTap = (e) => {
     e.preventDefault();
     const now = Date.now();
-    if (now - lastTapRef.current < 300) {
-      setShowMobilePlayer(true);
-    }
+    if (now - lastTapRef.current < 300) setShowMobilePlayer(true);
     lastTapRef.current = now;
   };
 
@@ -107,7 +105,6 @@ function Reproductor() {
       if (touchStartX.current === null) return;
       const deltaX = e.changedTouches[0].clientX - touchStartX.current;
       const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
-
       if (Math.abs(deltaX) > 60 && deltaY < 40) {
         if (deltaX < 0) playNext();
         else            playPrev();
@@ -118,7 +115,6 @@ function Reproductor() {
 
     playerBar.addEventListener('touchstart', onTouchStart, { passive: true });
     playerBar.addEventListener('touchend',   onTouchEnd,   { passive: true });
-
     return () => {
       playerBar.removeEventListener('touchstart', onTouchStart);
       playerBar.removeEventListener('touchend',   onTouchEnd);
@@ -127,46 +123,27 @@ function Reproductor() {
 
   useEffect(() => { return () => clearTimeout(slideTimeout.current); }, []);
 
-  // ─── Sync refs + cargar cola según lista activa ───────────────────────────────
+  // ─── Sync refs — SOLO guardan la lista, NUNCA tocan la cola ──────────────────
+  // La cola cambia ÚNICAMENTE cuando el usuario presiona play en una canción.
+  // Navegar entre vistas (abrir/cerrar favoritos, perfil, artista) no afecta
+  // la reproducción en curso para nada.
   const handleArtistTracksLoaded = (t) => {
+    artistTracksRef.current = t;
     setArtistTracks(t);
     setTopArtist(prev => prev ? { ...prev, totalTracks: t.length } : prev);
   };
-  const handleUserTracksLoaded = (t) => setUserTracks(t);
-  const handleFavTracksLoaded  = (t) => setFavTracks(t);
 
-  useEffect(() => {
-    tracksRef.current = tracks;
-    // Solo usar tracks generales si no hay ninguna otra lista activa
-    if (favTracks.length === 0 && userTracks.length === 0 && artistTracks.length === 0) {
-      playQueue.current.loadTracks(tracks);
-    }
-  }, [tracks]);
+  const handleUserTracksLoaded = (t) => {
+    userTracksRef.current = t;
+    setUserTracks(t);
+  };
 
-  useEffect(() => {
-    artistTracksRef.current = artistTracks;
-    if (artistTracks.length > 0) {
-      playQueue.current.loadTracks(artistTracks);
-      historyStack.current.clear();
-    }
-  }, [artistTracks]);
+  const handleFavTracksLoaded = (t) => {
+    favTracksRef.current = t;
+    setFavTracks(t);
+  };
 
-  useEffect(() => {
-    userTracksRef.current = userTracks;
-    if (userTracks.length > 0) {
-      playQueue.current.loadTracks(userTracks);
-      historyStack.current.clear();
-    }
-  }, [userTracks]);
-
-  useEffect(() => {
-    favTracksRef.current = favTracks;
-    if (favTracks.length > 0) {
-      playQueue.current.loadTracks(favTracks);
-      historyStack.current.clear();
-    }
-  }, [favTracks]);
-
+  useEffect(() => { tracksRef.current    = tracks;      }, [tracks]);
   useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
 
   useEffect(() => {
@@ -202,15 +179,19 @@ function Reproductor() {
     };
   }, []);
 
-  // ─── Carga de canciones destacadas → delegado a HashTablesTries ──────────────
+  // ─── Carga de canciones destacadas ───────────────────────────────────────────
   const loadFeaturedTracks = async () => {
     try {
       setTracksLoading(true);
       setError('');
       setTopArtist(null);
-      historyStack.current.clear();
       const data = await fetchFeaturedTracks(spotifyService);
       setTracks(data);
+      tracksRef.current = data;
+      // Solo actualizar la cola si el contexto activo ya es 'search'
+      if (playQueue.current.getContext() === 'search') {
+        playQueue.current.loadTracks(data, 'search');
+      }
     } catch {
       setError('No se pudieron cargar las canciones. Intenta de nuevo.');
     } finally {
@@ -218,7 +199,7 @@ function Reproductor() {
     }
   };
 
-  // ─── Búsqueda de canciones y artistas → delegado a HashTablesTries (cache + Trie) ─
+  // ─── Búsqueda ─────────────────────────────────────────────────────────────────
   const runSearch = async (query) => {
     try {
       setTracksLoading(true);
@@ -227,8 +208,13 @@ function Reproductor() {
       const { tracks: trackResults, topArtist, searchArtistTracks } =
         await searchTracksAndArtists(query, spotifyService);
       setTracks(trackResults);
+      tracksRef.current = trackResults;
       setTopArtist(topArtist);
       setSearchArtistTracks(searchArtistTracks);
+      // Solo actualizar la cola si el contexto activo es 'search'
+      if (playQueue.current.getContext() === 'search') {
+        playQueue.current.loadTracks(trackResults, 'search');
+      }
       if (resultsRef.current) resultsRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     } catch {
       setError('Error al buscar canciones.');
@@ -317,7 +303,6 @@ function Reproductor() {
                 setIsPlaying(false);
                 clearInterval(progressInterval.current);
               } else if (event.data === YTS.ENDED) {
-                // ── Cuando la canción termina sola: avanzar con la Cola ──
                 setIsPlaying(false);
                 clearInterval(progressInterval.current);
                 const ct = currentTrackRef.current;
@@ -344,7 +329,7 @@ function Reproductor() {
     });
   };
 
-  // ─── Reproducción ─────────────────────────────────────────────────────────────
+  // ─── Reproducción interna — no toca el contexto ───────────────────────────────
   const playTrackInternal = async (track) => {
     setCurrentTrack(track);
     setIsPlaying(false);
@@ -356,7 +341,6 @@ function Reproductor() {
     favoritesService.checkFavorite(track.id).then(res => setIsFavorite(res.isFavorite));
 
     const videoId = await spotifyService.getYoutubeVideoId(track.name, track.artist);
-
     if (!videoId) {
       setYoutubeLoading(false);
       setError(`No se encontró "${track.name}" en YouTube.`);
@@ -368,9 +352,44 @@ function Reproductor() {
     await loadYoutubePlayer(videoId);
   };
 
-  const playTrack = async (track) => {
+  // ─── playTrack — llamado cuando el usuario presiona una canción ───────────────
+  //
+  // REGLA PRINCIPAL:
+  //   El contexto de la cola SOLO cambia aquí, y SOLO si el source es diferente
+  //   al contexto activo. Navegar entre vistas nunca toca la cola.
+  //
+  //   source = 'search'    → búsqueda / canciones destacadas
+  //   source = 'artist'    → perfil de artista
+  //   source = 'favorites' → Mis Canciones
+  //   source = 'profile'   → top mensual del perfil de usuario
+  //
+  const playTrack = async (track, source) => {
+    // Misma canción → solo toggle
     if (currentTrack?.id === track.id) { togglePlay(); return; }
-    // Guardar la canción actual en el historial antes de cambiar
+
+    // Si el source es distinto al contexto activo → cambiar contexto y cargar lista
+    if (source && source !== playQueue.current.getContext()) {
+      historyStack.current.clear();
+      playQueue.current.setContext(source, historyStack.current);
+
+      switch (source) {
+        case 'search':
+          playQueue.current.loadTracks(tracksRef.current, 'search');
+          break;
+        case 'artist':
+          playQueue.current.loadTracks(artistTracksRef.current, 'artist');
+          break;
+        case 'favorites':
+          playQueue.current.loadTracks(favTracksRef.current, 'favorites');
+          break;
+        case 'profile':
+          playQueue.current.loadTracks(userTracksRef.current, 'profile');
+          break;
+        default:
+          break;
+      }
+    }
+
     if (currentTrack) historyStack.current.push(currentTrack);
     await playTrackInternal(track);
   };
@@ -393,26 +412,23 @@ function Reproductor() {
     finally { setFavoriteLoading(false); }
   };
 
-  // ─── Siguiente / Anterior usando Cola + Pila ──────────────────────────────────
+  // ─── Siguiente / Anterior — siempre dentro del contexto activo ───────────────
   const playNext = () => {
     if (!currentTrack || playQueue.current.isEmpty()) return;
-    // Guardar la canción actual en la pila de historial
     historyStack.current.push(currentTrack);
     triggerSlide('slide-in-right');
     const next = playQueue.current.getNext(currentTrack.id);
-    if (next) playTrack(next);
+    if (next) playTrackInternal(next);
   };
 
   const playPrev = () => {
     if (!currentTrack) return;
     triggerSlide('slide-in-left');
-    // Si hay historial real en la pila, retroceder a la canción anterior real
     if (!historyStack.current.isEmpty()) {
       const prev = historyStack.current.pop();
       if (prev) playTrackInternal(prev);
       return;
     }
-    // Si no hay historial, retroceder en la cola de forma circular
     const prev = playQueue.current.getPrev(currentTrack.id);
     if (prev) playTrackInternal(prev);
   };
@@ -485,10 +501,15 @@ function Reproductor() {
 
   // ── Vista activa ──────────────────────────────────────────────────────────────
   const renderContent = () => {
+
+    // ── Mis Canciones (Favoritos) ──
     if (showMisCanciones) return (
       <MisCanciones
-        onClose={() => { setShowMisCanciones(false); setFavTracks([]); }}
-        onPlayTrack={playTrack}
+        onClose={() => {
+          setShowMisCanciones(false);
+          setFavTracks([]);
+        }}
+        onPlayTrack={(track) => playTrack(track, 'favorites')}
         onTracksLoaded={handleFavTracksLoaded}
         currentTrack={currentTrack}
         isPlaying={isPlaying}
@@ -496,11 +517,15 @@ function Reproductor() {
       />
     );
 
+    // ── Perfil de usuario ──
     if (showUserProfile) return (
       <UserProfile
         user={user}
-        onClose={() => { setShowUserProfile(false); setUserTracks([]); }}
-        onPlayTrack={playTrack}
+        onClose={() => {
+          setShowUserProfile(false);
+          setUserTracks([]);
+        }}
+        onPlayTrack={(track) => playTrack(track, 'profile')}
         onTracksLoaded={handleUserTracksLoaded}
         currentTrack={currentTrack}
         isPlaying={isPlaying}
@@ -509,11 +534,15 @@ function Reproductor() {
       />
     );
 
+    // ── Perfil de artista ──
     if (selectedArtist) return (
       <ArtistProfile
         artistId={selectedArtist}
-        onClose={() => { setSelectedArtist(null); setArtistTracks([]); }}
-        onPlayTrack={playTrack}
+        onClose={() => {
+          setSelectedArtist(null);
+          setArtistTracks([]);
+        }}
+        onPlayTrack={(track) => playTrack(track, 'artist')}
         onTracksLoaded={handleArtistTracksLoaded}
         currentTrack={currentTrack}
         isPlaying={isPlaying}
@@ -522,6 +551,7 @@ function Reproductor() {
       />
     );
 
+    // ── Vista principal: búsqueda / destacadas ──
     return (
       <div className="content-container">
         <div className="section-header">
@@ -555,7 +585,10 @@ function Reproductor() {
         ) : (
           <>
             {topArtist && (
-              <div className="artist-result-card" onClick={() => setSelectedArtist(topArtist.id)}>
+              <div
+                className="artist-result-card"
+                onClick={() => setSelectedArtist(topArtist.id)}
+              >
                 <div className="artist-result-img-wrap">
                   {topArtist.image ? (
                     <img src={topArtist.image} alt={topArtist.name} className="artist-result-img" />
@@ -591,7 +624,7 @@ function Reproductor() {
                 <div
                   key={track.id}
                   className={`track-card ${currentTrack?.id === track.id ? 'active' : ''}`}
-                  onClick={() => playTrack(track)}
+                  onClick={() => playTrack(track, 'search')}
                 >
                   <div className="track-image-wrapper">
                     {track.albumImage ? (
@@ -684,10 +717,7 @@ function Reproductor() {
             />
           </div>
           {suggestions.length > 0 && searchQuery.trim() !== '' && (
-            <ul
-              className="search-suggestions"
-              
-            >
+            <ul className="search-suggestions">
               {suggestions.map((s, i) => (
                 <li
                   key={`${s}-${i}`}
@@ -698,12 +728,8 @@ function Reproductor() {
                     color: 'var(--color-text)',
                     fontSize: '0.95rem',
                   }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(29, 185, 84, 0.15)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent';
-                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(29, 185, 84, 0.15)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                 >
                   {s}
                 </li>
@@ -715,6 +741,7 @@ function Reproductor() {
           <button
             className={`mis-canciones-btn ${showMisCanciones ? 'active' : ''}`}
             onClick={() => {
+              // Abrir/cerrar Mis Canciones NO cambia el contexto de reproducción
               setShowMisCanciones(v => !v);
               setShowUserProfile(false);
               setSelectedArtist(null);
@@ -730,6 +757,7 @@ function Reproductor() {
           <div
             className={`user-avatar ${showUserProfile ? 'user-avatar--active' : ''}`}
             onClick={() => {
+              // Abrir/cerrar perfil de usuario NO cambia el contexto de reproducción
               setShowUserProfile(v => !v);
               setShowMisCanciones(false);
               setSelectedArtist(null);
@@ -761,7 +789,6 @@ function Reproductor() {
       {currentTrack && (
         <div className="player-bar" ref={playerBarRef}>
 
-          {/* Info canción — doble tap en portada abre reproductor móvil */}
           <div
             className={`player-track-info ${slideDirection}`}
             onAnimationEnd={() => setSlideDirection('')}
@@ -781,7 +808,6 @@ function Reproductor() {
             </div>
           </div>
 
-          {/* Controles */}
           <div className="player-controls">
             <button className="ctrl-btn skip-btn" onClick={playPrev} disabled={youtubeLoading}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
@@ -831,7 +857,6 @@ function Reproductor() {
             </div>
           </div>
 
-          {/* Volumen — solo desktop */}
           <div className="player-volume">
             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
               <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
