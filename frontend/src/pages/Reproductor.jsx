@@ -66,6 +66,7 @@ function Reproductor() {
   const artistTracksRef  = useRef([]);
   const userTracksRef    = useRef([]);
   const favTracksRef     = useRef([]);
+  const recentTracksRef  = useRef([]);   // ← lista del carrusel "Sigue escuchando"
   const currentTrackRef  = useRef(null);
   const resultsRef       = useRef(null);
   const playerBarRef     = useRef(null);
@@ -235,10 +236,14 @@ function Reproductor() {
       setSelectedArtist(null);
       setArtistTracks([]);
       setSearchArtistTracks([]);
+      setTracks([]);
       loadFeaturedTracks();
       return;
     }
 
+    // Limpiar resultados anteriores de inmediato para no mostrar contenido viejo
+    setTracks([]);
+    setTopArtist(null);
     searchTimeout.current = setTimeout(() => runSearch(value), 500);
   };
 
@@ -364,31 +369,43 @@ function Reproductor() {
   //   source = 'favorites' → Mis Canciones
   //   source = 'profile'   → top mensual del perfil de usuario
   //
-  const playTrack = async (track, source) => {
+  const playTrack = async (track, source, trackList) => {
     // Misma canción → solo toggle
     if (currentTrack?.id === track.id) { togglePlay(); return; }
 
-    // Si el source es distinto al contexto activo → cambiar contexto y cargar lista
-    if (source && source !== playQueue.current.getContext()) {
-      historyStack.current.clear();
-      playQueue.current.setContext(source, historyStack.current);
+    // Normalizar: 'recent' y 'recommended' se manejan como 'search' en la cola
+    const queueContext = (source === 'recent' || source === 'recommended') ? 'search' : (source || 'search');
 
-      switch (source) {
-        case 'search':
-          playQueue.current.loadTracks(tracksRef.current, 'search');
-          break;
-        case 'artist':
-          playQueue.current.loadTracks(artistTracksRef.current, 'artist');
-          break;
-        case 'favorites':
-          playQueue.current.loadTracks(favTracksRef.current, 'favorites');
-          break;
-        case 'profile':
-          playQueue.current.loadTracks(userTracksRef.current, 'profile');
-          break;
-        default:
-          break;
-      }
+    // Si el source es distinto al contexto activo → cambiar contexto y cargar lista
+    if (queueContext !== playQueue.current.getContext()) {
+      historyStack.current.clear();
+      playQueue.current.setContext(queueContext, historyStack.current);
+    }
+
+    // Actualizar siempre la lista correcta según source
+    switch (source) {
+      case 'recent':
+        // Si Inicio nos pasa su lista de recientes, guardarla
+        if (trackList) recentTracksRef.current = trackList;
+        playQueue.current.loadTracks(recentTracksRef.current, 'search');
+        break;
+      case 'recommended':
+        playQueue.current.loadTracks(tracksRef.current, 'search');
+        break;
+      case 'search':
+        playQueue.current.loadTracks(tracksRef.current, 'search');
+        break;
+      case 'artist':
+        playQueue.current.loadTracks(artistTracksRef.current, 'artist');
+        break;
+      case 'favorites':
+        playQueue.current.loadTracks(favTracksRef.current, 'favorites');
+        break;
+      case 'profile':
+        playQueue.current.loadTracks(userTracksRef.current, 'profile');
+        break;
+      default:
+        break;
     }
 
     if (currentTrack) historyStack.current.push(currentTrack);

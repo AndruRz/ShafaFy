@@ -92,14 +92,31 @@
   gap: 1rem;
   overflow-x: auto;
   scroll-behavior: smooth;
-  padding-bottom: 0.5rem;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  /* Snap suave */
+  padding-bottom: 0.75rem;
   scroll-snap-type: x mandatory;
+  /* Scrollbar visible — Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(29,185,84,0.5) rgba(255,255,255,0.06);
 }
 
-.inicio-carousel::-webkit-scrollbar { display: none; }
+/* Scrollbar visible — Chrome / Edge / Safari */
+.inicio-carousel::-webkit-scrollbar {
+  height: 5px;
+}
+
+.inicio-carousel::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.06);
+  border-radius: 10px;
+}
+
+.inicio-carousel::-webkit-scrollbar-thumb {
+  background: rgba(29,185,84,0.5);
+  border-radius: 10px;
+}
+
+.inicio-carousel::-webkit-scrollbar-thumb:hover {
+  background: rgba(29,185,84,0.85);
+}
 
 /* ─── CARD DE CANCIÓN (tipo "Mix diario" de Spotify) ─────────────────────── */
 .track-card-square {

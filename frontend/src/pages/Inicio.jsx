@@ -37,10 +37,8 @@ function TrackCardSquare({ track, isActive, isPlaying, youtubeLoading, onClick, 
           </div>
         )}
 
-        {/* Razón de recomendación */}
         {reason && <div className="tcs-reason-badge">{reason}</div>}
 
-        {/* Overlay play */}
         <div className="tcs-overlay">
           <div className="tcs-play-icon">
             {isActive && youtubeLoading ? <Spinner /> :
@@ -102,18 +100,60 @@ function SkeletonRow({ count = 5, isArtist = false }) {
   );
 }
 
+// ─── Carrusel con flechas de navegación ──────────────────────────────────────
+function Carousel({ children, isEmpty }) {
+  const scrollRef  = useRef(null);
+  const [canLeft,  setCanLeft]  = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const checkScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 4);
+    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  };
+
+  useEffect(() => {
+    // Pequeño delay para que el DOM termine de pintar las tarjetas
+    const t = setTimeout(checkScroll, 120);
+    return () => clearTimeout(t);
+  }, [children]);
+
+  const scroll = (dir) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * 340, behavior: 'smooth' });
+    // Actualizar estado tras el scroll
+    setTimeout(checkScroll, 350);
+  };
+
+  if (isEmpty) return <>{children}</>;
+
+  return (
+    <div className="inicio-carousel-wrap">
+      <div className="inicio-carousel">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, onOpenArtist }) {
-  const [recentTracks,    setRecentTracks]    = useState([]);
-  const [relatedArtists,  setRelatedArtists]  = useState([]);
-  const [recommendedTracks, setRecommendedTracks] = useState([]);
-  const [mayLikeArtists,  setMayLikeArtists]  = useState([]);
-  const [showGraphModal,  setShowGraphModal]   = useState(false);
+  const [recentTracks,      setRecentTracks]      = useState([]);
+  const [relatedArtists,    setRelatedArtists]     = useState([]);
+  const [recommendedTracks, setRecommendedTracks]  = useState([]);
+  const [mayLikeArtists,    setMayLikeArtists]     = useState([]);
+  const [showGraphModal,    setShowGraphModal]      = useState(false);
 
   const [loadingRecent,  setLoadingRecent]  = useState(true);
   const [loadingArtists, setLoadingArtists] = useState(true);
   const [loadingRecom,   setLoadingRecom]   = useState(true);
   const [loadingMayLike, setLoadingMayLike] = useState(true);
+
+  // Guardar la lista de canciones recientes para que next/prev funcione
+  // dentro del carrusel "Sigue escuchando"
+  const recentTracksRef = useRef([]);
 
   useEffect(() => {
     loadAll();
@@ -127,7 +167,6 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
   }, [currentTrack?.artistId]);
 
   const loadAll = async () => {
-    // Cargar en paralelo para máxima velocidad
     loadRecentTracks();
     loadRelatedArtists();
     loadMayLike();
@@ -137,6 +176,7 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
     setLoadingRecent(true);
     const data = await graphService.getRecentTracks();
     setRecentTracks(data);
+    recentTracksRef.current = data.map(normalizeTrack);
     setLoadingRecent(false);
   };
 
@@ -163,7 +203,7 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
 
   const userName = user?.fullName?.split(' ')[0] || user?.username || 'tú';
 
-  // Normalizar track para que playTrack siempre reciba el mismo formato
+  // Normalizar track al formato estándar que usa el reproductor
   const normalizeTrack = (t) => ({
     id:         t.trackId  || t.id,
     name:       t.trackName  || t.name,
@@ -173,6 +213,14 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
     albumImage: t.albumImage,
     genre:      t.genre,
   });
+
+  // Al reproducir desde "Sigue escuchando" pasamos la lista completa del carrusel
+  // para que next/prev funcione dentro de esa sección.
+  // El source 'recent' se maneja en Reproductor.jsx como un alias de 'search'
+  // con la lista de recientes precargada.
+  const handlePlayRecent = (track) => {
+    onPlayTrack(normalizeTrack(track), 'recent', recentTracksRef.current);
+  };
 
   return (
     <div className="inicio-page">
@@ -199,7 +247,7 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
             Reproduce canciones para que aparezcan aquí.
           </div>
         ) : (
-          <div className="inicio-carousel">
+          <Carousel>
             {recentTracks.map(track => (
               <TrackCardSquare
                 key={track.trackId || track.id}
@@ -207,10 +255,10 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
                 isActive={currentTrack?.id === (track.trackId || track.id)}
                 isPlaying={isPlaying}
                 youtubeLoading={youtubeLoading}
-                onClick={() => onPlayTrack(normalizeTrack(track), 'recent')}
+                onClick={() => handlePlayRecent(track)}
               />
             ))}
-          </div>
+          </Carousel>
         )}
       </div>
 
@@ -249,7 +297,7 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
             Escucha más artistas para ver conexiones aquí.
           </div>
         ) : (
-          <div className="inicio-carousel">
+          <Carousel>
             {relatedArtists.map(artist => (
               <ArtistCardSquare
                 key={artist.artistId}
@@ -257,7 +305,7 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
                 onClick={() => onOpenArtist(artist.artistId)}
               />
             ))}
-          </div>
+          </Carousel>
         )}
       </div>
 
@@ -284,7 +332,7 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
               Sin colaboraciones encontradas para este artista.
             </div>
           ) : (
-            <div className="inicio-carousel">
+            <Carousel>
               {recommendedTracks.map(track => (
                 <TrackCardSquare
                   key={track.id}
@@ -296,7 +344,7 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
                   onClick={() => onPlayTrack(normalizeTrack(track), 'recommended')}
                 />
               ))}
-            </div>
+            </Carousel>
           )}
         </div>
       )}
@@ -336,7 +384,7 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
             Necesitamos más datos de escucha para sugerirte artistas.
           </div>
         ) : (
-          <div className="inicio-carousel">
+          <Carousel>
             {mayLikeArtists.map(artist => (
               <ArtistCardSquare
                 key={artist.artistId}
@@ -344,7 +392,7 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
                 onClick={() => onOpenArtist(artist.artistId)}
               />
             ))}
-          </div>
+          </Carousel>
         )}
       </div>
 
