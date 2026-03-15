@@ -1,4 +1,5 @@
-const PlayHistory = require('../models/PlayHistory');
+const PlayHistory  = require('../models/PlayHistory');
+const graphCtrl    = require('./graphController');
 
 // ─── POST /api/history/play ───────────────────────────────────────────────────
 // Registra una reproducción. Si la canción ya fue escuchada este mes, incrementa
@@ -51,6 +52,12 @@ exports.registerPlay = async (req, res) => {
       message: 'Reproducción registrada',
       playCount: record.playCount
     });
+
+    // ── Actualizar grafo en background (no bloquea la respuesta) ──────────────
+    // Solo si el artistId es un ID real de Spotify (no el nombre del artista)
+    if (artistId && artistId !== artistName) {
+      graphCtrl.updateGraph(req.userId, artistId, artistName).catch(() => {});
+    }
 
   } catch (error) {
     console.error('❌ Error en registerPlay:', error);
