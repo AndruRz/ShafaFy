@@ -240,7 +240,7 @@ function LandingPage() {
             </div>
             <div className="about-image">
               <div className="image-wrapper">
-                <img src="../src/assets/logo shafaty.png" alt="ShafaFy Logo" />
+                <img src="../logo shafaty.png" alt="ShafaFy Logo" />
                 <div className="image-glow"></div>
               </div>
             </div>
@@ -803,7 +803,7 @@ function LandingPage() {
               <div className="university-card">
                 <div className="university-logo-wrapper">
                   <div className="university-logo-container">
-                    <img src="../src/assets/Logo_UAO.png" alt="Universidad Autónoma de Occidente" />
+                    <img src="/Logo_UAO.png" alt="Universidad Autónoma de Occidente" />
                   </div>
                   <h3 className="university-name">Universidad Autónoma de Occidente</h3>
                   <p className="university-motto">Transformación con conocimiento</p>
