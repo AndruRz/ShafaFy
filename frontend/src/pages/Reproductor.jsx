@@ -9,7 +9,7 @@ import UserProfile from './UserProfile';
 import MisCanciones from './MisCanciones';
 import Reproductor_Movil from './Reproductor_Movil';
 import { HistoryStack, PlayQueue } from '../data_structures/EstructurasLineales';
-import { fetchFeaturedTracks, searchTracksAndArtists, getSuggestions } from '../data_structures/HashTablesTries';
+import { fetchFeaturedTracks, searchTracksAndArtists, getSuggestions, clearCaches } from '../data_structures/HashTablesTries';
 import './css/Reproductor.css';
 
 function Reproductor() {
@@ -453,6 +453,7 @@ function Reproductor() {
   const handleLogout = async () => {
     clearInterval(progressInterval.current);
     if (ytPlayerRef.current) { try { ytPlayerRef.current.stopVideo(); } catch (_) {} }
+    clearCaches();
     await authService.logout();
     navigate('/auth');
   };
