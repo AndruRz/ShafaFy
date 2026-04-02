@@ -133,12 +133,11 @@ const getSpotifyToken = async () => {
 //  ACTUALIZAR GRAFO — se llama desde historyController al registrar un play
 //  Conecta todos los artistas del historial reciente del usuario entre sí
 // ─────────────────────────────────────────────────────────────────────────────
-exports.updateGraph = async (userId, newArtistId, newArtistName) => {
+exports.updateGraph = async (userId, artistList) => {
   try {
-    if (!newArtistId || newArtistId === newArtistName) return; // artistId inválido
+    if (!artistList || artistList.length === 0) return;
 
-    // Obtener los últimos 20 artistas escuchados por este usuario este mes
-    const now   = new Date();
+    const now    = new Date();
     const recent = await PlayHistory.find({
       userId,
       month: now.getMonth(),
@@ -148,34 +147,62 @@ exports.updateGraph = async (userId, newArtistId, newArtistName) => {
       .limit(20)
       .select('artistId artistName');
 
-    // Conectar el artista nuevo con cada uno de los recientes
     const ops = [];
-    for (const record of recent) {
-      if (!record.artistId || record.artistId === record.artistName) continue;
-      if (record.artistId === newArtistId) continue;
 
-      // Siempre guardar el de menor ID como artistA para evitar duplicados
-      const [idA, nameA, idB, nameB] =
-        newArtistId < record.artistId
-          ? [newArtistId, newArtistName, record.artistId, record.artistName]
-          : [record.artistId, record.artistName, newArtistId, newArtistName];
+    for (const artist of artistList) {
+      const { id: newId, name: newName } = artist;
+      if (!newId || !newName) continue;
 
-      ops.push({
-        updateOne: {
-          filter: { artistAId: idA, artistBId: idB, connectionType: 'colistened' },
-          update: {
-            $inc: { weight: 1 },
-            $set: { artistAName: nameA, artistBName: nameB, updatedAt: new Date() },
-            $addToSet: { users: userId },
+      // 1. Aristas colistened — conectar con historial reciente
+      for (const record of recent) {
+        const recId   = record.artistId?.trim();
+        const recName = record.artistName?.trim();
+        if (!recId || recId === newId) continue;
+
+        const [idA, nameA, idB, nameB] =
+          newId < recId
+            ? [newId, newName, recId, recName]
+            : [recId, recName, newId, newName];
+
+        ops.push({
+          updateOne: {
+            filter: { artistAId: idA, artistBId: idB, connectionType: 'colistened' },
+            update: {
+              $inc: { weight: 1 },
+              $set: { artistAName: nameA, artistBName: nameB, updatedAt: new Date() },
+              $addToSet: { users: userId },
+            },
+            upsert: true,
           },
-          upsert: true,
-        },
-      });
+        });
+      }
+
+      // 2. Aristas collaboration — conectar artistas de la misma canción entre sí
+      for (const other of artistList) {
+        if (other.id === newId) continue;
+
+        const [idA, nameA, idB, nameB] =
+          newId < other.id
+            ? [newId, newName, other.id, other.name]
+            : [other.id, other.name, newId, newName];
+
+        ops.push({
+          updateOne: {
+            filter: { artistAId: idA, artistBId: idB, connectionType: 'collaboration' },
+            update: {
+              $inc: { weight: 5 },   // colaboración vale más que colistened
+              $set: { artistAName: nameA, artistBName: nameB, updatedAt: new Date() },
+              $addToSet: { users: userId },
+            },
+            upsert: true,
+          },
+        });
+      }
     }
 
     if (ops.length > 0) await ArtistGraph.bulkWrite(ops);
+
   } catch (err) {
-    // No interrumpir la reproducción si falla la actualización del grafo
     console.warn('⚠️ Error actualizando grafo:', err.message);
   }
 };

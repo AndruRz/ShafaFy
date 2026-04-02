@@ -1,62 +1,68 @@
-const PlayHistory  = require('../models/PlayHistory');
-const graphCtrl    = require('./graphController');
+const PlayHistory = require('../models/PlayHistory');
+const graphCtrl   = require('./graphController');
 
 // ─── POST /api/history/play ───────────────────────────────────────────────────
 // Registra una reproducción. Si la canción ya fue escuchada este mes, incrementa
 // el contador. Si no, crea un nuevo registro.
 exports.registerPlay = async (req, res) => {
   try {
-    const { trackId, trackName, artistName, artistId, albumName, albumImage, genre } = req.body;
+    const {
+      trackId, trackName, artistName, artistId,
+      albumName, albumImage, genre,
+      allArtists = [], allArtistIds = [],
+    } = req.body;
 
-    // Validar campos obligatorios
     if (!trackId || !trackName || !artistName || !artistId) {
       return res.status(400).json({
         success: false,
-        message: 'trackId, trackName, artistName y artistId son requeridos'
+        message: 'trackId, trackName, artistName y artistId son requeridos',
       });
     }
 
-    const now = new Date();
-    const month = now.getMonth(); // 0-11
-    const year = now.getFullYear();
+    const now   = new Date();
+    const month = now.getMonth();
+    const year  = now.getFullYear();
 
-    // Upsert: si existe incrementa playCount, si no existe lo crea
     const record = await PlayHistory.findOneAndUpdate(
-      {
-        userId: req.userId,
-        trackId,
-        month,
-        year
-      },
+      { userId: req.userId, trackId, month, year },
       {
         $inc: { playCount: 1 },
         $set: {
           trackName,
-          artistName,
-          artistId,
-          albumName: albumName || '',
+          artistName,   // ya es solo el artista principal
+          artistId,     // ya es solo su ID
+          albumName:  albumName  || '',
           albumImage: albumImage || '',
-          genre: genre || 'unknown',
-          lastPlayedAt: now
+          genre:      genre      || 'unknown',
+          lastPlayedAt: now,
         },
-        $setOnInsert: { month, year }
+        $setOnInsert: { month, year },
       },
-      {
-        upsert: true,
-        new: true
-      }
+      { upsert: true, new: true }
     );
 
     res.status(200).json({
       success: true,
       message: 'Reproducción registrada',
-      playCount: record.playCount
+      playCount: record.playCount,
     });
 
-    // ── Actualizar grafo en background (no bloquea la respuesta) ──────────────
-    // Solo si el artistId es un ID real de Spotify (no el nombre del artista)
-    if (artistId && artistId !== artistName) {
-      graphCtrl.updateGraph(req.userId, artistId, artistName).catch(() => {});
+    // ── Actualizar grafo en background ────────────────────────────────────────
+    // Construir lista limpia de { id, name } para cada artista de la canción
+    const artistList = [];
+
+    // Combinar allArtistIds y allArtists por posición
+    const names = allArtists.length   > 0 ? allArtists   : [artistName];
+    const ids   = allArtistIds.length > 0 ? allArtistIds : [artistId];
+
+    for (let i = 0; i < names.length; i++) {
+      const name = names[i]?.trim();
+      const id   = (ids[i] || ids[0] || name)?.trim(); // fallback al primer id o al nombre
+      if (name) artistList.push({ id, name });
+    }
+
+    if (artistList.length > 0) {
+      graphCtrl.updateGraph(req.userId, artistList).catch(() => {});
     }
 
   } catch (error) {
@@ -64,7 +70,7 @@ exports.registerPlay = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error al registrar reproducción',
-      error: error.message
+      error: error.message,
     });
   }
 };

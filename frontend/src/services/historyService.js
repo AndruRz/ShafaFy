@@ -6,17 +6,27 @@ const historyService = {
   // Registrar una reproducción (llamar cuando empiece a sonar una canción)
   registerPlay: async (track) => {
     try {
+      // Separar artistas y tomar solo el primero como principal
+      const allArtists   = (track.artist || '').split(',').map(a => a.trim()).filter(Boolean);
+      const primaryName  = allArtists[0] || track.artist;
+
+      // El artistId puede venir igual de sucio — tomar solo el primero también
+      const allIds      = (track.artistId || '').split(',').map(a => a.trim()).filter(Boolean);
+      const primaryId   = allIds[0] || primaryName;
+
       await api.post('/history/play', {
         trackId:    track.id,
         trackName:  track.name,
-        artistName: track.artist,
-        artistId:   track.artistId || track.artist, // fallback al nombre si no hay ID
-        albumName:  track.album  || '',
+        artistName: primaryName,          // solo el artista principal
+        artistId:   primaryId,            // solo su ID
+        albumName:  track.album    || '',
         albumImage: track.albumImage || '',
-        genre:      track.genre  || 'unknown',
+        genre:      track.genre    || 'unknown',
+        // Mandamos la lista completa para que el backend construya el grafo
+        allArtists: allArtists,
+        allArtistIds: allIds,
       });
     } catch (error) {
-      // No interrumpir la reproducción si falla el registro
       console.warn('No se pudo registrar la reproducción:', error.message);
     }
   },
