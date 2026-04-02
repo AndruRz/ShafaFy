@@ -37,6 +37,7 @@ function Reproductor() {
   const [selectedArtist, setSelectedArtist]         = useState(null);
   const [artistTracks, setArtistTracks]             = useState([]);
   const [searchArtistTracks, setSearchArtistTracks] = useState([]);
+  const [artistFallbackTracks, setArtistFallbackTracks] = useState([]);
 
   // ─── Perfil usuario ──────────────────────────────────────────────────────────
   const [showUserProfile, setShowUserProfile] = useState(false);
@@ -209,6 +210,11 @@ function Reproductor() {
       setSelectedArtist(null);
       const { tracks: trackResults, topArtist, searchArtistTracks } =
         await searchTracksAndArtists(query, spotifyService);
+
+      if (topArtist && searchArtistTracks?.length > 0) {
+        topArtist.totalTracks = searchArtistTracks.length;
+      }
+
       setTracks(trackResults);
       tracksRef.current = trackResults;
       setTopArtist(topArtist);
@@ -312,7 +318,16 @@ function Reproductor() {
                 setIsPlaying(false);
                 clearInterval(progressInterval.current);
                 const ct = currentTrackRef.current;
-                if (!ct || playQueue.current.isEmpty()) return;
+                if (!ct) return;
+
+                if (playQueue.current.isEmpty()) {
+                  // Fallback: si la cola está vacía, usar recentTracksRef como cola
+                  if (recentTracksRef.current.length > 0) {
+                    playQueue.current.setContext('search', historyStack.current);
+                    playQueue.current.loadTracks(recentTracksRef.current, 'search');
+                  } else return;
+                }
+
                 historyStack.current.push(ct);
                 const next = playQueue.current.getNext(ct.id);
                 if (next) {
@@ -385,9 +400,12 @@ function Reproductor() {
     // Actualizar siempre la lista correcta según source
     switch (source) {
       case 'recent':
-        // Si Inicio nos pasa su lista de recientes, guardarla
-        if (trackList) recentTracksRef.current = trackList;
-        playQueue.current.loadTracks(recentTracksRef.current, 'search');
+        if (trackList && trackList.length > 0) recentTracksRef.current = trackList;
+        // Siempre recargar con la lista más reciente disponible
+        playQueue.current.loadTracks(
+          recentTracksRef.current.length > 0 ? recentTracksRef.current : tracksRef.current,
+          'search'
+        );
         break;
       case 'recommended':
         playQueue.current.loadTracks(tracksRef.current, 'search');
@@ -560,21 +578,21 @@ function Reproductor() {
         onClose={() => {
           setSelectedArtist(null);
           setArtistTracks([]);
+          setArtistFallbackTracks([]);
         }}
         onPlayTrack={(track) => playTrack(track, 'artist')}
         onTracksLoaded={handleArtistTracksLoaded}
         currentTrack={currentTrack}
         isPlaying={isPlaying}
         youtubeLoading={youtubeLoading}
-        fallbackTracks={searchArtistTracks}
+        fallbackTracks={artistFallbackTracks.length > 0 ? artistFallbackTracks : searchArtistTracks}
       />
     );
 
-    // ── Vista principal: Inicio (reemplaza canciones destacadas cuando no hay búsqueda) ──
+    // ── Vista principal: Inicio ──
     return (
       <div className="content-container">
 
-        {/* Buscador muestra resultados normales con tracks-grid */}
         {searchQuery ? (
           <>
             <div className="section-header">
@@ -686,8 +704,13 @@ function Reproductor() {
             currentTrack={currentTrack}
             isPlaying={isPlaying}
             youtubeLoading={youtubeLoading}
-            onPlayTrack={(track, source) => playTrack(track, source || 'search')}
-            onOpenArtist={(artistId) => setSelectedArtist(artistId)}
+            // ── FIX: pasar trackList como tercer argumento para que
+            //    "Sigue escuchando" cargue la cola con su lista correcta ──
+            onPlayTrack={(track, source, trackList) => playTrack(track, source || 'search', trackList)}
+            onOpenArtist={(artistId, fallback = []) => {
+              setArtistFallbackTracks(fallback);
+              setSelectedArtist(artistId);
+            }}
           />
         )}
       </div>
@@ -761,7 +784,6 @@ function Reproductor() {
           <button
             className={`mis-canciones-btn ${showMisCanciones ? 'active' : ''}`}
             onClick={() => {
-              // Abrir/cerrar Mis Canciones NO cambia el contexto de reproducción
               setShowMisCanciones(v => !v);
               setShowUserProfile(false);
               setSelectedArtist(null);
@@ -777,7 +799,6 @@ function Reproductor() {
           <div
             className={`user-avatar ${showUserProfile ? 'user-avatar--active' : ''}`}
             onClick={() => {
-              // Abrir/cerrar perfil de usuario NO cambia el contexto de reproducción
               setShowUserProfile(v => !v);
               setShowMisCanciones(false);
               setSelectedArtist(null);

@@ -1,6 +1,7 @@
 // src/pages/Inicio.jsx
 import { useState, useEffect, useRef } from 'react';
 import graphService    from '../services/graphService';
+import spotifyService  from '../services/spotifyService';
 import GraphModal      from './GraphModal';
 import './css/Inicio.css';
 
@@ -65,7 +66,7 @@ function ArtistCardSquare({ artist, onClick }) {
     <div className="artist-card-square" onClick={onClick}>
       <div className="acs-avatar">
         {artist.image ? (
-          <img src={artist.image} alt={artist.artistName} />
+          <img src={artist.image} alt={artist.artistName || artist.name} />
         ) : (
           <div className="acs-avatar-placeholder">
             {(artist.artistName || artist.name || '?').charAt(0).toUpperCase()}
@@ -114,7 +115,6 @@ function Carousel({ children, isEmpty }) {
   };
 
   useEffect(() => {
-    // Pequeño delay para que el DOM termine de pintar las tarjetas
     const t = setTimeout(checkScroll, 120);
     return () => clearTimeout(t);
   }, [children]);
@@ -123,7 +123,6 @@ function Carousel({ children, isEmpty }) {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollBy({ left: dir * 340, behavior: 'smooth' });
-    // Actualizar estado tras el scroll
     setTimeout(checkScroll, 350);
   };
 
@@ -137,6 +136,42 @@ function Carousel({ children, isEmpty }) {
     </div>
   );
 }
+
+// ─── Helper: enriquecer artistas con imagen + ID real de Spotify ──────────────
+// El grafo solo guarda artistName/artistId internos. Este helper busca en
+// Spotify para obtener la imagen de perfil y el ID oficial, que es el que
+// necesita ArtistProfile para cargar las canciones correctamente.
+const enrichArtistsWithSpotify = async (artists) => {
+  const enriched = await Promise.all(
+    artists.map(async (artist) => {
+      if (artist.image && artist.artistId?.length === 22) return artist;
+
+      try {
+        const searchName = artist.artistName || artist.name || '';
+        const results = await spotifyService.searchArtists(searchName);
+        if (!results?.length) return artist;
+
+        const normalize = (s) => s?.toLowerCase().trim() ?? '';
+        const match =
+          results.find(r => normalize(r.name) === normalize(searchName)) ||
+          results.find(r => normalize(r.name).includes(normalize(searchName))) ||
+          results[0];
+
+        if (!match) return artist;
+
+        return {
+          ...artist,
+          artistId: match.id || artist.artistId,
+          image:    match.image || artist.image || null,
+          genres:   artist.genres?.length > 0 ? artist.genres : (match.genres || []),
+        };
+      } catch {
+        return artist;
+      }
+    })
+  );
+  return enriched;
+};
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, onOpenArtist }) {
@@ -180,10 +215,12 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
     setLoadingRecent(false);
   };
 
+  // ─── FIX: enriquecer con Spotify para obtener imagen + ID real ───────────────
   const loadRelatedArtists = async () => {
     setLoadingArtists(true);
     const data = await graphService.getRelatedArtists();
-    setRelatedArtists(data);
+    const enriched = await enrichArtistsWithSpotify(data);
+    setRelatedArtists(enriched);
     setLoadingArtists(false);
   };
 
@@ -194,10 +231,12 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
     setLoadingRecom(false);
   };
 
+  // ─── FIX: enriquecer con Spotify para obtener imagen + ID real ───────────────
   const loadMayLike = async () => {
     setLoadingMayLike(true);
     const data = await graphService.getMayLike();
-    setMayLikeArtists(data);
+    const enriched = await enrichArtistsWithSpotify(data);
+    setMayLikeArtists(enriched);
     setLoadingMayLike(false);
   };
 
@@ -214,12 +253,27 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
     genre:      t.genre,
   });
 
-  // Al reproducir desde "Sigue escuchando" pasamos la lista completa del carrusel
-  // para que next/prev funcione dentro de esa sección.
-  // El source 'recent' se maneja en Reproductor.jsx como un alias de 'search'
-  // con la lista de recientes precargada.
+  // Al reproducir desde "Sigue escuchando" pasamos la lista completa normalizada
+  // para que next/prev funcione en orden dentro del carrusel.
   const handlePlayRecent = (track) => {
     onPlayTrack(normalizeTrack(track), 'recent', recentTracksRef.current);
+  };
+
+  // Al abrir un artista desde el grafo, usamos el artistId ya enriquecido
+  // (ID real de Spotify). Pasamos un fallback vacío; ArtistProfile buscará
+  // las canciones él mismo si el backend no las trae.
+  const handleOpenArtist = (artist) => {
+    const fallback = (artist.tracks || []).map(t => ({
+      id:         t.trackId   || t.id,
+      name:       t.trackName || t.name,
+      artist:     t.artistName || t.artist || artist.artistName || artist.name,
+      artistId:   t.artistId  || artist.artistId,
+      album:      t.albumName || t.album || '',
+      albumImage: t.albumImage || '',
+      duration:   t.duration  || 0,
+      genre:      t.genre     || '',
+    }));
+    onOpenArtist(artist.artistId, fallback);
   };
 
   return (
@@ -302,7 +356,7 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
               <ArtistCardSquare
                 key={artist.artistId}
                 artist={artist}
-                onClick={() => onOpenArtist(artist.artistId)}
+                onClick={() => handleOpenArtist(artist)}
               />
             ))}
           </Carousel>
@@ -389,7 +443,7 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
               <ArtistCardSquare
                 key={artist.artistId}
                 artist={artist}
-                onClick={() => onOpenArtist(artist.artistId)}
+                onClick={() => handleOpenArtist(artist)}
               />
             ))}
           </Carousel>

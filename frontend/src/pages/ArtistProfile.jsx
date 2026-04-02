@@ -20,9 +20,30 @@ function ArtistProfile({ artistId, onClose, onPlayTrack, onTracksLoaded, current
       setError('');
       const data = await spotifyService.getArtistProfile(artistId);
 
-      // ✅ Si el backend no encontró canciones, usar las de la búsqueda general
-      if ((!data.topTracks || data.topTracks.length === 0) && fallbackTracks.length > 0) {
-        data.topTracks = fallbackTracks;
+      // 1. Si el backend no trajo canciones, usar el fallback del padre
+      if (!data.topTracks || data.topTracks.length === 0) {
+        if (fallbackTracks.length > 0) {
+          data.topTracks = fallbackTracks;
+        } else {
+          // 2. Último recurso: buscar directamente en Spotify por nombre del artista
+          try {
+            const artistName = data.artist?.name || '';
+            if (artistName) {
+              const searchResults = await spotifyService.search(artistName, 15);
+              const normalize = (s) => s?.toLowerCase().trim() ?? '';
+              const matched = (searchResults || []).filter(t => {
+                const tArtist = normalize(t.artist || t.artistName || '');
+                const name    = normalize(artistName);
+                return tArtist.includes(name) || name.includes(tArtist);
+              });
+              if (matched.length > 0) {
+                data.topTracks = matched;
+              }
+            }
+          } catch {
+            // silencioso, quedará vacío
+          }
+        }
       }
 
       setProfileData(data);
