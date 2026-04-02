@@ -1,17 +1,20 @@
+// controllers/historyController.js
 const PlayHistory = require('../models/PlayHistory');
 const graphCtrl   = require('./graphController');
 
 // ─── POST /api/history/play ───────────────────────────────────────────────────
-// Registra una reproducción. Si la canción ya fue escuchada este mes, incrementa
-// el contador. Si no, crea un nuevo registro.
+// Registra una reproducción. Guarda solo el artista PRINCIPAL (primero del string).
+// Pasa la lista completa de artistas al graphController para construir las aristas.
 exports.registerPlay = async (req, res) => {
   try {
     const {
       trackId, trackName, artistName, artistId,
       albumName, albumImage, genre,
-      allArtists = [], allArtistIds = [],
+      allArtists   = [],
+      allArtistIds = [],
     } = req.body;
 
+    // Validar campos obligatorios
     if (!trackId || !trackName || !artistName || !artistId) {
       return res.status(400).json({
         success: false,
@@ -20,20 +23,22 @@ exports.registerPlay = async (req, res) => {
     }
 
     const now   = new Date();
-    const month = now.getMonth();
+    const month = now.getMonth(); // 0-11
     const year  = now.getFullYear();
 
+    // Upsert: si existe incrementa playCount, si no lo crea
+    // artistName y artistId ya vienen limpios (solo el principal) desde el frontend
     const record = await PlayHistory.findOneAndUpdate(
       { userId: req.userId, trackId, month, year },
       {
         $inc: { playCount: 1 },
         $set: {
           trackName,
-          artistName,   // ya es solo el artista principal
-          artistId,     // ya es solo su ID
-          albumName:  albumName  || '',
-          albumImage: albumImage || '',
-          genre:      genre      || 'unknown',
+          artistName,
+          artistId,
+          albumName:   albumName  || '',
+          albumImage:  albumImage || '',
+          genre:       genre      || 'unknown',
           lastPlayedAt: now,
         },
         $setOnInsert: { month, year },
@@ -42,23 +47,21 @@ exports.registerPlay = async (req, res) => {
     );
 
     res.status(200).json({
-      success: true,
-      message: 'Reproducción registrada',
+      success:   true,
+      message:   'Reproducción registrada',
       playCount: record.playCount,
     });
 
     // ── Actualizar grafo en background ────────────────────────────────────────
-    // Construir lista limpia de { id, name } para cada artista de la canción
-    const artistList = [];
-
-    // Combinar allArtistIds y allArtists por posición
+    // Construir lista de { id, name } para cada artista de la canción
     const names = allArtists.length   > 0 ? allArtists   : [artistName];
     const ids   = allArtistIds.length > 0 ? allArtistIds : [artistId];
 
+    const artistList = [];
     for (let i = 0; i < names.length; i++) {
       const name = names[i]?.trim();
-      const id   = (ids[i] || ids[0] || name)?.trim(); // fallback al primer id o al nombre
-      if (name) artistList.push({ id, name });
+      const id   = (ids[i] || ids[0] || name)?.trim();
+      if (name && id) artistList.push({ id, name });
     }
 
     if (artistList.length > 0) {
@@ -70,7 +73,7 @@ exports.registerPlay = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error al registrar reproducción',
-      error: error.message,
+      error:   error.message,
     });
   }
 };
@@ -79,24 +82,20 @@ exports.registerPlay = async (req, res) => {
 // Devuelve las 10 canciones más escuchadas por el usuario en el mes actual
 exports.getTopTracks = async (req, res) => {
   try {
-    const now = new Date();
+    const now   = new Date();
     const month = now.getMonth();
-    const year = now.getFullYear();
+    const year  = now.getFullYear();
 
-    const topTracks = await PlayHistory.find({
-      userId: req.userId,
-      month,
-      year
-    })
+    const topTracks = await PlayHistory.find({ userId: req.userId, month, year })
       .sort({ playCount: -1 })
       .limit(10)
       .select('trackId trackName artistName artistId albumName albumImage genre playCount lastPlayedAt');
 
     res.status(200).json({
       success: true,
-      month: month + 1, // Lo devolvemos en formato 1-12 para el frontend
+      month:   month + 1, // 1-12 para el frontend
       year,
-      topTracks
+      topTracks,
     });
 
   } catch (error) {
@@ -104,63 +103,55 @@ exports.getTopTracks = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error al obtener top canciones',
-      error: error.message
+      error:   error.message,
     });
   }
 };
 
 // ─── GET /api/history/top-artists ────────────────────────────────────────────
-// Devuelve los 10 artistas más escuchados por el usuario en el mes actual
-// Agrupa todas las canciones del mismo artista y suma sus reproducciones
+// Agrupa por artistId (ya limpio = solo artista principal) y suma reproducciones.
+// Así "LATIN MAFIA" aparece una sola vez aunque haya canciones con feat.
 exports.getTopArtists = async (req, res) => {
   try {
-    const now = new Date();
+    const now   = new Date();
     const month = now.getMonth();
-    const year = now.getFullYear();
+    const year  = now.getFullYear();
 
     const topArtists = await PlayHistory.aggregate([
-      // Filtrar por usuario y mes actual
       {
         $match: {
           userId: new (require('mongoose').Types.ObjectId)(req.userId),
           month,
-          year
-        }
+          year,
+        },
       },
-      // Agrupar por artista y sumar reproducciones
+      // Agrupar por artistId limpio
       {
         $group: {
-          _id: '$artistId',
+          _id:        '$artistId',
           artistName: { $first: '$artistName' },
           totalPlays: { $sum: '$playCount' },
-          trackCount: { $sum: 1 } // Cuántas canciones distintas escuchó de ese artista
-        }
+          trackCount: { $sum: 1 },
+        },
       },
-      // Ordenar por más escuchado
-      {
-        $sort: { totalPlays: -1 }
-      },
-      // Top 10
-      {
-        $limit: 10
-      },
-      // Dar forma al resultado
+      { $sort: { totalPlays: -1 } },
+      { $limit: 10 },
       {
         $project: {
-          _id: 0,
-          artistId: '$_id',
+          _id:        0,
+          artistId:   '$_id',
           artistName: 1,
           totalPlays: 1,
-          trackCount: 1
-        }
-      }
+          trackCount: 1,
+        },
+      },
     ]);
 
     res.status(200).json({
-      success: true,
-      month: month + 1,
+      success:    true,
+      month:      month + 1,
       year,
-      topArtists
+      topArtists,
     });
 
   } catch (error) {
@@ -168,40 +159,32 @@ exports.getTopArtists = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error al obtener top artistas',
-      error: error.message
+      error:   error.message,
     });
   }
 };
 
 // ─── GET /api/history/recent ─────────────────────────────────────────────────
 // Últimas 20 canciones reproducidas (ordenadas por lastPlayedAt)
-// Útil para mostrar "escuchado recientemente" en el perfil
 exports.getRecentTracks = async (req, res) => {
   try {
-    const now = new Date();
+    const now   = new Date();
     const month = now.getMonth();
-    const year = now.getFullYear();
+    const year  = now.getFullYear();
 
-    const recentTracks = await PlayHistory.find({
-      userId: req.userId,
-      month,
-      year
-    })
+    const recentTracks = await PlayHistory.find({ userId: req.userId, month, year })
       .sort({ lastPlayedAt: -1 })
       .limit(20)
       .select('trackId trackName artistName albumName albumImage playCount lastPlayedAt');
 
-    res.status(200).json({
-      success: true,
-      recentTracks
-    });
+    res.status(200).json({ success: true, recentTracks });
 
   } catch (error) {
     console.error('❌ Error en getRecentTracks:', error);
     res.status(500).json({
       success: false,
       message: 'Error al obtener canciones recientes',
-      error: error.message
+      error:   error.message,
     });
   }
 };

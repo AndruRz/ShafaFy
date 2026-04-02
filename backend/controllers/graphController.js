@@ -1,7 +1,7 @@
 // controllers/graphController.js
-const ArtistGraph  = require('../models/ArtistGraph');
-const PlayHistory  = require('../models/PlayHistory');
-const axios        = require('axios');
+const ArtistGraph = require('../models/ArtistGraph');
+const PlayHistory = require('../models/PlayHistory');
+const axios       = require('axios');
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  CLASE GRAFO EN MEMORIA
@@ -28,7 +28,6 @@ class ArtistGraphInMemory {
     this.addNode(idA, nameA);
     this.addNode(idB, nameB);
 
-    // Agregar en ambas direcciones (grafo no dirigido)
     const edgesA = this.adjacency.get(idA);
     const existA = edgesA.find(e => e.artistId === idB);
     if (existA) existA.weight += weight;
@@ -52,8 +51,7 @@ class ArtistGraphInMemory {
       const { id, d } = queue.shift();
       if (d >= depth) continue;
 
-      const edges = this.adjacency.get(id) || [];
-      // Ordenar por peso descendente para explorar los más relacionados primero
+      const edges  = this.adjacency.get(id) || [];
       const sorted = [...edges].sort((a, b) => b.weight - a.weight);
 
       for (const edge of sorted) {
@@ -72,10 +70,7 @@ class ArtistGraphInMemory {
       }
     }
 
-    // Ordenar por peso y devolver los mejores
-    return result
-      .sort((a, b) => b.weight - a.weight)
-      .slice(0, limit);
+    return result.sort((a, b) => b.weight - a.weight).slice(0, limit);
   }
 
   // Devuelve todos los nodos y aristas para visualización
@@ -104,11 +99,10 @@ class ArtistGraphInMemory {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  HELPERS — Spotify token (reutiliza el del spotifyController si está en caché,
-//  o pide uno nuevo)
+//  HELPERS — Spotify token
 // ─────────────────────────────────────────────────────────────────────────────
-let _spotifyToken    = null;
-let _spotifyExpiry   = null;
+let _spotifyToken  = null;
+let _spotifyExpiry = null;
 
 const getSpotifyToken = async () => {
   const now = Date.now();
@@ -131,7 +125,12 @@ const getSpotifyToken = async () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  ACTUALIZAR GRAFO — se llama desde historyController al registrar un play
-//  Conecta todos los artistas del historial reciente del usuario entre sí
+//
+//  artistList = [{ id, name }, { id, name }, ...]  (todos los artistas de la canción)
+//
+//  Crea DOS tipos de aristas:
+//    1. colistened   → cada artista nuevo ↔ artistas del historial reciente
+//    2. collaboration → artistas de la MISMA canción entre sí (peso 5)
 // ─────────────────────────────────────────────────────────────────────────────
 exports.updateGraph = async (userId, artistList) => {
   try {
@@ -150,10 +149,11 @@ exports.updateGraph = async (userId, artistList) => {
     const ops = [];
 
     for (const artist of artistList) {
-      const { id: newId, name: newName } = artist;
+      const newId   = artist.id?.trim();
+      const newName = artist.name?.trim();
       if (!newId || !newName) continue;
 
-      // 1. Aristas colistened — conectar con historial reciente
+      // ── 1. Aristas colistened con historial reciente ──────────────────────
       for (const record of recent) {
         const recId   = record.artistId?.trim();
         const recName = record.artistName?.trim();
@@ -177,20 +177,22 @@ exports.updateGraph = async (userId, artistList) => {
         });
       }
 
-      // 2. Aristas collaboration — conectar artistas de la misma canción entre sí
+      // ── 2. Aristas collaboration entre artistas de la misma canción ───────
       for (const other of artistList) {
-        if (other.id === newId) continue;
+        const otherId   = other.id?.trim();
+        const otherName = other.name?.trim();
+        if (!otherId || otherId === newId) continue;
 
         const [idA, nameA, idB, nameB] =
-          newId < other.id
-            ? [newId, newName, other.id, other.name]
-            : [other.id, other.name, newId, newName];
+          newId < otherId
+            ? [newId, newName, otherId, otherName]
+            : [otherId, otherName, newId, newName];
 
         ops.push({
           updateOne: {
             filter: { artistAId: idA, artistBId: idB, connectionType: 'collaboration' },
             update: {
-              $inc: { weight: 5 },   // colaboración vale más que colistened
+              $inc: { weight: 5 }, // colaboración vale más que colistened
               $set: { artistAName: nameA, artistBName: nameB, updatedAt: new Date() },
               $addToSet: { users: userId },
             },
@@ -209,15 +211,14 @@ exports.updateGraph = async (userId, artistList) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  AGREGAR COLABORACIONES DE SPOTIFY AL GRAFO
-//  Busca las colaboraciones reales del artista (tracks donde aparece con otros)
-//  y las agrega como aristas de tipo 'collaboration' con peso alto (10)
+//  Busca canciones del artista con múltiples artistas en Spotify
+//  y las agrega como aristas 'collaboration' con peso 10
 // ─────────────────────────────────────────────────────────────────────────────
 const addCollaborationsToGraph = async (artistId, artistName) => {
   try {
     const token   = await getSpotifyToken();
     const headers = { Authorization: `Bearer ${token}` };
 
-    // Buscar canciones del artista que tengan feat/colaboraciones
     const res = await axios.get('https://api.spotify.com/v1/search', {
       headers,
       params: {
@@ -232,7 +233,6 @@ const addCollaborationsToGraph = async (artistId, artistName) => {
     const ops    = [];
 
     for (const track of tracks) {
-      // Solo tracks con múltiples artistas (colaboraciones)
       if (track.artists.length < 2) continue;
 
       for (const collab of track.artists) {
@@ -247,7 +247,7 @@ const addCollaborationsToGraph = async (artistId, artistName) => {
           updateOne: {
             filter: { artistAId: idA, artistBId: idB, connectionType: 'collaboration' },
             update: {
-              $inc: { weight: 10 }, // Las colaboraciones tienen mayor peso
+              $inc: { weight: 10 },
               $set: { artistAName: nameA, artistBName: nameB, updatedAt: new Date() },
             },
             upsert: true,
@@ -267,14 +267,14 @@ const addCollaborationsToGraph = async (artistId, artistName) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  GET /api/graph/related-artists
-//  Artistas relacionados al historial del usuario usando el grafo
+//  Artistas relacionados al historial del usuario usando BFS en el grafo
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getRelatedArtists = async (req, res) => {
   try {
     const now    = new Date();
     const userId = req.userId;
 
-    // 1. Obtener artistas que escuchó el usuario este mes
+    // 1. Artistas que escuchó el usuario este mes (top 10 por playCount)
     const history = await PlayHistory.find({
       userId,
       month: now.getMonth(),
@@ -290,7 +290,7 @@ exports.getRelatedArtists = async (req, res) => {
 
     const listenedIds = new Set(history.map(h => h.artistId));
 
-    // 2. Obtener todas las aristas del grafo relacionadas con esos artistas
+    // 2. Obtener aristas del grafo relacionadas con esos artistas
     const edges = await ArtistGraph.find({
       $or: [
         { artistAId: { $in: [...listenedIds] } },
@@ -300,26 +300,40 @@ exports.getRelatedArtists = async (req, res) => {
       .sort({ weight: -1 })
       .limit(100);
 
-    // 3. Construir grafo en memoria
-    const graph = new ArtistGraphInMemory();
-
-    for (const h of history) {
-      graph.addNode(h.artistId, h.artistName);
+    // 3. Si hay muy pocas aristas, enriquecer con colaboraciones de Spotify
+    if (edges.length < 5) {
+      for (const h of history.slice(0, 3)) {
+        await addCollaborationsToGraph(h.artistId, h.artistName);
+      }
+      // Re-consultar tras enriquecer
+      const newEdges = await ArtistGraph.find({
+        $or: [
+          { artistAId: { $in: [...listenedIds] } },
+          { artistBId: { $in: [...listenedIds] } },
+        ],
+      })
+        .sort({ weight: -1 })
+        .limit(100);
+      edges.length = 0;
+      edges.push(...newEdges);
     }
+
+    // 4. Construir grafo en memoria
+    const graph = new ArtistGraphInMemory();
+    for (const h of history) graph.addNode(h.artistId, h.artistName);
     for (const edge of edges) {
       graph.addEdge(
         edge.artistAId, edge.artistAName,
         edge.artistBId, edge.artistBName,
-        edge.weight, edge.connectionType
+        edge.weight,    edge.connectionType
       );
     }
 
-    // 4. BFS desde cada artista escuchado para encontrar relacionados
-    const related  = new Map();
+    // 5. BFS desde cada artista escuchado → acumular vecinos no escuchados
+    const related = new Map();
     for (const h of history) {
-      const neighbors = graph.getRelated(h.artistId, 2, 5);
+      const neighbors = graph.getRelated(h.artistId, 2, 10);
       for (const n of neighbors) {
-        // Excluir artistas que ya escuchó
         if (listenedIds.has(n.artistId)) continue;
         if (related.has(n.artistId)) {
           related.get(n.artistId).weight += n.weight;
@@ -331,7 +345,34 @@ exports.getRelatedArtists = async (req, res) => {
 
     const artists = [...related.values()]
       .sort((a, b) => b.weight - a.weight)
-      .slice(0, 8);
+      .slice(0, 10);
+
+    // 6. Enriquecer con imagen de Spotify
+    if (artists.length > 0) {
+      try {
+        const token   = await getSpotifyToken();
+        const headers = { Authorization: `Bearer ${token}` };
+        const ids     = artists.map(a => a.artistId).join(',');
+
+        const spotifyRes = await axios.get(
+          `https://api.spotify.com/v1/artists?ids=${ids}`,
+          { headers }
+        );
+
+        const artistMap = new Map(
+          (spotifyRes.data.artists || []).map(a => [a.id, a])
+        );
+
+        for (const artist of artists) {
+          const info = artistMap.get(artist.artistId);
+          if (info) {
+            artist.image      = info.images[0]?.url || null;
+            artist.genres     = info.genres          || [];
+            artist.popularity = info.popularity       || 0;
+          }
+        }
+      } catch (_) {}
+    }
 
     res.status(200).json({ success: true, artists });
 
@@ -354,7 +395,7 @@ exports.getRecommendedTracks = async (req, res) => {
     }
 
     // 1. Buscar colaboraciones en el grafo
-    const collabEdges = await ArtistGraph.find({
+    let collabEdges = await ArtistGraph.find({
       $or: [
         { artistAId: artistId, connectionType: 'collaboration' },
         { artistBId: artistId, connectionType: 'collaboration' },
@@ -366,8 +407,7 @@ exports.getRecommendedTracks = async (req, res) => {
     // Si no hay colaboraciones en el grafo, buscarlas en Spotify y guardarlas
     if (collabEdges.length === 0) {
       await addCollaborationsToGraph(artistId, artistName);
-      // Re-consultar después de guardar
-      const newEdges = await ArtistGraph.find({
+      collabEdges = await ArtistGraph.find({
         $or: [
           { artistAId: artistId, connectionType: 'collaboration' },
           { artistBId: artistId, connectionType: 'collaboration' },
@@ -375,7 +415,6 @@ exports.getRecommendedTracks = async (req, res) => {
       })
         .sort({ weight: -1 })
         .limit(5);
-      collabEdges.push(...newEdges);
     }
 
     if (collabEdges.length === 0) {
@@ -392,22 +431,21 @@ exports.getRecommendedTracks = async (req, res) => {
       const collabName = edge.artistAId === artistId ? edge.artistBName : edge.artistAName;
 
       try {
-        const res = await axios.get(
+        const res2 = await axios.get(
           `https://api.spotify.com/v1/artists/${collabId}/top-tracks`,
           { headers, params: { market: 'US' } }
         );
 
-        const topTracks = (res.data.tracks || []).slice(0, 3).map(t => ({
-          id:          t.id,
-          name:        t.name,
-          artist:      t.artists.map(a => a.name).join(', '),
-          artistId:    t.artists[0]?.id,
-          album:       t.album?.name,
-          albumImage:  t.album?.images[0]?.url || null,
-          duration:    t.duration_ms,
-          popularity:  t.popularity,
-          // Razón de la recomendación
-          reason:      `Colaboró con ${artistName}`,
+        const topTracks = (res2.data.tracks || []).slice(0, 3).map(t => ({
+          id:           t.id,
+          name:         t.name,
+          artist:       t.artists.map(a => a.name).join(', '),
+          artistId:     t.artists[0]?.id,
+          album:        t.album?.name,
+          albumImage:   t.album?.images[0]?.url || null,
+          duration:     t.duration_ms,
+          popularity:   t.popularity,
+          reason:       `Colaboró con ${artistName}`,
           reasonArtist: collabName,
         }));
 
@@ -427,14 +465,12 @@ exports.getRecommendedTracks = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 //  GET /api/graph/may-like
 //  "Artistas que te pueden gustar" — filtrado colaborativo entre usuarios
-//  + colaboraciones de Spotify
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getMayLike = async (req, res) => {
   try {
     const now    = new Date();
     const userId = req.userId;
 
-    // 1. Artistas que escuchó el usuario
     const myHistory = await PlayHistory.find({
       userId,
       month: now.getMonth(),
@@ -445,32 +481,33 @@ exports.getMayLike = async (req, res) => {
       .select('artistId artistName');
 
     if (myHistory.length === 0) {
-      return res.status(200).json({ success: true, artists: [], message: 'Escucha más música para obtener recomendaciones' });
+      return res.status(200).json({
+        success: true,
+        artists: [],
+        message: 'Escucha más música para obtener recomendaciones',
+      });
     }
 
     const myArtistIds = new Set(myHistory.map(h => h.artistId));
 
-    // 2. Buscar aristas donde aparecen mis artistas → artistas que escucharon otros usuarios
     const edges = await ArtistGraph.find({
       $or: [
         { artistAId: { $in: [...myArtistIds] } },
         { artistBId: { $in: [...myArtistIds] } },
       ],
-      // Priorizar conexiones con más usuarios distintos
       'users.1': { $exists: true }, // al menos 2 usuarios
     })
       .sort({ weight: -1 })
       .limit(50);
 
-    // 3. Puntuar artistas relacionados
     const scores = new Map();
 
     for (const edge of edges) {
-      const isA      = myArtistIds.has(edge.artistAId);
-      const otherId  = isA ? edge.artistBId   : edge.artistAId;
+      const isA       = myArtistIds.has(edge.artistAId);
+      const otherId   = isA ? edge.artistBId   : edge.artistAId;
       const otherName = isA ? edge.artistBName : edge.artistAName;
 
-      if (myArtistIds.has(otherId)) continue; // ya lo escucha
+      if (myArtistIds.has(otherId)) continue;
 
       const current = scores.get(otherId) || { artistId: otherId, artistName: otherName, score: 0, userCount: 0 };
       current.score     += edge.weight;
@@ -478,7 +515,6 @@ exports.getMayLike = async (req, res) => {
       scores.set(otherId, current);
     }
 
-    // 4. Enriquecer con imagen de Spotify (para los top 6)
     const sorted = [...scores.values()]
       .sort((a, b) => b.score - a.score)
       .slice(0, 6);
@@ -502,8 +538,8 @@ exports.getMayLike = async (req, res) => {
           const info = artistMap.get(artist.artistId);
           if (info) {
             artist.image      = info.images[0]?.url || null;
-            artist.genres     = info.genres || [];
-            artist.popularity = info.popularity || 0;
+            artist.genres     = info.genres          || [];
+            artist.popularity = info.popularity       || 0;
           }
         }
       } catch (_) {}
@@ -551,7 +587,6 @@ exports.getGraphData = async (req, res) => {
     const now    = new Date();
     const userId = req.userId;
 
-    // Artistas del usuario
     const history = await PlayHistory.find({
       userId,
       month: now.getMonth(),
@@ -571,7 +606,6 @@ exports.getGraphData = async (req, res) => {
 
     const listenedIds = history.map(h => h.artistId);
 
-    // Todas las aristas que involucran a sus artistas
     const edges = await ArtistGraph.find({
       $or: [
         { artistAId: { $in: listenedIds } },
@@ -581,15 +615,10 @@ exports.getGraphData = async (req, res) => {
       .sort({ weight: -1 })
       .limit(80);
 
-    // Construir grafo en memoria
     const graph = new ArtistGraphInMemory();
 
-    // Agregar nodos del historial del usuario con playCount como tamaño
-    for (const h of history) {
-      graph.addNode(h.artistId, h.artistName);
-    }
+    for (const h of history) graph.addNode(h.artistId, h.artistName);
 
-    // Agregar todas las aristas
     for (const edge of edges) {
       graph.addEdge(
         edge.artistAId, edge.artistAName,
@@ -600,20 +629,16 @@ exports.getGraphData = async (req, res) => {
 
     const { nodes, edges: graphEdges } = graph.getGraphData();
 
-    // Enriquecer nodos con playCount y si el usuario los escuchó
-    const playMap = new Map(history.map(h => [h.artistId, h.playCount]));
+    const playMap      = new Map(history.map(h => [h.artistId, h.playCount]));
     const enrichedNodes = nodes.map(n => ({
       ...n,
       playCount:  playMap.get(n.id) || 0,
-      isListened: playMap.has(n.id), // true = el usuario lo escuchó, false = relacionado
+      isListened: playMap.has(n.id),
     }));
 
     res.status(200).json({
       success: true,
-      graph: {
-        nodes: enrichedNodes,
-        edges: graphEdges,
-      },
+      graph: { nodes: enrichedNodes, edges: graphEdges },
     });
 
   } catch (error) {

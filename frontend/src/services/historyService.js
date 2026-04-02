@@ -6,27 +6,34 @@ const historyService = {
   // Registrar una reproducción (llamar cuando empiece a sonar una canción)
   registerPlay: async (track) => {
     try {
-      // Separar artistas y tomar solo el primero como principal
-      const allArtists   = (track.artist || '').split(',').map(a => a.trim()).filter(Boolean);
-      const primaryName  = allArtists[0] || track.artist;
+      // Separar el string de artistas por coma → tomar solo el primero como principal
+      const allArtistNames = (track.artist || '')
+        .split(',')
+        .map(a => a.trim())
+        .filter(Boolean);
 
-      // El artistId puede venir igual de sucio — tomar solo el primero también
-      const allIds      = (track.artistId || '').split(',').map(a => a.trim()).filter(Boolean);
-      const primaryId   = allIds[0] || primaryName;
+      const allArtistIds = (track.artistId || '')
+        .split(',')
+        .map(a => a.trim())
+        .filter(Boolean);
+
+      const primaryName = allArtistNames[0] || track.artist;
+      const primaryId   = allArtistIds[0]   || primaryName; // fallback al nombre si no hay ID real
 
       await api.post('/history/play', {
-        trackId:    track.id,
-        trackName:  track.name,
-        artistName: primaryName,          // solo el artista principal
-        artistId:   primaryId,            // solo su ID
-        albumName:  track.album    || '',
-        albumImage: track.albumImage || '',
-        genre:      track.genre    || 'unknown',
-        // Mandamos la lista completa para que el backend construya el grafo
-        allArtists: allArtists,
-        allArtistIds: allIds,
+        trackId:      track.id,
+        trackName:    track.name,
+        artistName:   primaryName,       // solo el artista principal
+        artistId:     primaryId,         // solo su ID
+        albumName:    track.album    || '',
+        albumImage:   track.albumImage || '',
+        genre:        track.genre    || 'unknown',
+        // Lista completa para que el backend construya aristas del grafo
+        allArtists:   allArtistNames,
+        allArtistIds: allArtistIds,
       });
     } catch (error) {
+      // No interrumpir la reproducción si falla el registro
       console.warn('No se pudo registrar la reproducción:', error.message);
     }
   },
