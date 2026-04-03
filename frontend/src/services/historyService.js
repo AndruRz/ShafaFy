@@ -6,34 +6,35 @@ const historyService = {
   // Registrar una reproducción (llamar cuando empiece a sonar una canción)
   registerPlay: async (track) => {
     try {
-      // Separar el string de artistas por coma → tomar solo el primero como principal
+      // Separar nombres — vienen como "LATIN MAFIA, Omar Apollo"
       const allArtistNames = (track.artist || '')
         .split(',')
         .map(a => a.trim())
         .filter(Boolean);
 
-      const allArtistIds = (track.artistId || '')
+      // Separar IDs — ahora vienen en artistIds: "id1, id2, id3"
+      // fallback a artistId si artistIds no existe (compatibilidad)
+      const allArtistIds = (track.artistIds || track.artistId || '')
         .split(',')
         .map(a => a.trim())
         .filter(Boolean);
 
       const primaryName = allArtistNames[0] || track.artist;
-      const primaryId   = allArtistIds[0]   || primaryName; // fallback al nombre si no hay ID real
+      const primaryId = allArtistIds[0] || null; // No hagas fallback al nombre
 
       await api.post('/history/play', {
         trackId:      track.id,
         trackName:    track.name,
         artistName:   primaryName,       // solo el artista principal
-        artistId:     primaryId,         // solo su ID
+        artistId:     primaryId,         // solo su ID real de Spotify
         albumName:    track.album    || '',
         albumImage:   track.albumImage || '',
         genre:        track.genre    || 'unknown',
-        // Lista completa para que el backend construya aristas del grafo
+        // Lista completa para construir aristas del grafo correctamente
         allArtists:   allArtistNames,
         allArtistIds: allArtistIds,
       });
     } catch (error) {
-      // No interrumpir la reproducción si falla el registro
       console.warn('No se pudo registrar la reproducción:', error.message);
     }
   },
