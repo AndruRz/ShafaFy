@@ -677,6 +677,27 @@
    ================================================ */
 
 /* ── Botón Mis Canciones en el header ── */
+.forum-nav-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  color: var(--color-text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.forum-nav-btn:hover {
+  background: rgba(29,185,84,0.12);
+  border-color: rgba(29,185,84,0.35);
+  color: var(--color-primary);
+}
+
 .mis-canciones-btn {
   width: 36px;
   height: 36px;

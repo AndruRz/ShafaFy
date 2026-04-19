@@ -1,0 +1,54 @@
+{
+  "servidor_a_cliente": [
+    {
+      "evento": "post_creado",
+      "salas": ["foro:lista"],
+      "payload": {
+        "post": {
+          "id": "...",
+          "title": "...",
+          "content": "...",
+          "author": { "id": "...", "username": "...", "fullName": "..." },
+          "createdAt": "...",
+          "updatedAt": "...",
+          "commentCount": 0
+        }
+      }
+    },
+    {
+      "evento": "post_actualizado",
+      "salas": ["foro:lista", "foro:post:<idDelPost>"],
+      "payload": {
+        "post": { "id": "...", "title": "...", "content": "...", "commentCount": 3 }
+      }
+    },
+    {
+      "evento": "post_eliminado",
+      "salas": ["foro:lista", "foro:post:<idDelPost>"],
+      "payload": { "postId": "..." }
+    },
+    {
+      "evento": "comentario_creado",
+      "salas": ["foro:lista", "foro:post:<idDelPost>"],
+      "payload": {
+        "postId": "...",
+        "comment": {
+          "id": "...",
+          "postId": "...",
+          "parentCommentId": null,
+          "content": "...",
+          "author": { "id": "...", "username": "...", "fullName": "..." },
+          "createdAt": "...",
+          "updatedAt": "...",
+          "replies": []
+        }
+      }
+    }
+  ],
+  "cliente_a_servidor": [
+    { "evento": "unirse_lista_foro", "nota": "Entra en la sala del listado." },
+    { "evento": "salir_lista_foro", "nota": "Sale del listado." },
+    { "evento": "unirse_publicacion", "payload": "<postId>", "nota": "Ver detalle de un post." },
+    { "evento": "salir_publicacion", "payload": "<postId>", "nota": "Al desmontar la vista detalle." }
+  ]
+}

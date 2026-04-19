@@ -1,0 +1,61 @@
+{
+  "descripcion": "Ejemplo de cómo la API devuelve un post con comentarios como árbol (raíz = post; cada nodo tiene replies[] para hijos). En MongoDB los comentarios se guardan planos con parentCommentId.",
+  "post": {
+    "id": "6621a000000000000000001",
+    "title": "¿Qué álbum escucharon esta semana?",
+    "content": "Me gustaría recomendaciones de soul.",
+    "author": {
+      "id": "661000000000000000000001",
+      "username": "maria_lopez",
+      "fullName": "María López"
+    },
+    "createdAt": "2026-04-18T10:00:00.000Z",
+    "updatedAt": "2026-04-18T10:00:00.000Z",
+    "commentCount": 3
+  },
+  "comments": [
+    {
+      "id": "6621b000000000000000010",
+      "postId": "6621a000000000000000001",
+      "parentCommentId": null,
+      "content": "Yo volví a Listen de Beyoncé.",
+      "author": {
+        "id": "661000000000000000000002",
+        "username": "andre_r",
+        "fullName": "Andre Rodriguez"
+      },
+      "createdAt": "2026-04-18T11:00:00.000Z",
+      "updatedAt": "2026-04-18T11:00:00.000Z",
+      "replies": [
+        {
+          "id": "6621b000000000000000011",
+          "postId": "6621a000000000000000001",
+          "parentCommentId": "6621b000000000000000010",
+          "content": "¡Gran elección! El track 4 es mi favorito.",
+          "author": {
+            "id": "661000000000000000000003",
+            "username": "julian_v",
+            "fullName": "Julian Viafara"
+          },
+          "createdAt": "2026-04-18T11:30:00.000Z",
+          "updatedAt": "2026-04-18T11:30:00.000Z",
+          "replies": []
+        }
+      ]
+    },
+    {
+      "id": "6621b000000000000000020",
+      "postId": "6621a000000000000000001",
+      "parentCommentId": null,
+      "content": "Escuchando algo de jazz lo-fi :)",
+      "author": {
+        "id": "661000000000000000000004",
+        "username": "fan_shafafy",
+        "fullName": "Usuario Demo"
+      },
+      "createdAt": "2026-04-18T12:00:00.000Z",
+      "updatedAt": "2026-04-18T12:00:00.000Z",
+      "replies": []
+    }
+  ]
+}

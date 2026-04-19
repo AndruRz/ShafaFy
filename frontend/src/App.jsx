@@ -4,6 +4,9 @@ import { BrowserRouter as Router, Routes, Route, useNavigate, Navigate } from 'r
 import './App.css'
 import AuthPage from './pages/AuthPage'
 import Reproductor from './pages/Reproductor'
+import ForumList from './pages/ForumList'
+import ForumPostDetail from './pages/ForumPostDetail'
+import ForumPostForm from './pages/ForumPostForm'
 import authService from './services/authService'
 
 // Componente de la Landing Page
@@ -984,6 +987,39 @@ function App() {
               <Reproductor />
             </ProtectedRoute>
           } 
+        />
+
+        <Route
+          path="/foro"
+          element={
+            <ProtectedRoute>
+              <ForumList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/foro/nuevo"
+          element={
+            <ProtectedRoute>
+              <ForumPostForm />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/foro/editar/:postId"
+          element={
+            <ProtectedRoute>
+              <ForumPostForm />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/foro/post/:postId"
+          element={
+            <ProtectedRoute>
+              <ForumPostDetail />
+            </ProtectedRoute>
+          }
         />
         
         {/* Ruta 404 - redirige al inicio */}

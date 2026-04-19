@@ -55,6 +55,12 @@ const authService = {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
     }
+    try {
+      const { reiniciarClienteSocketForo } = await import('./foroSocket');
+      reiniciarClienteSocketForo();
+    } catch {
+      /* sin socket en entornos de prueba */
+    }
   },
 
   // Verificar si el usuario está autenticado
