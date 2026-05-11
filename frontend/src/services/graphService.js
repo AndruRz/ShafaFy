@@ -23,12 +23,10 @@ const graphService = {
     }
   },
 
-  // Canciones recomendadas por colaboraciones del artista actual
-  getRecommendedTracks: async (artistId, artistName) => {
+  // Canciones recomendadas basadas en el historial mensual (sin parámetros)
+  getRecommendedTracks: async () => {
     try {
-      const response = await api.get('/graph/recommended-tracks', {
-        params: { artistId, artistName },
-      });
+      const response = await api.get('/graph/recommended-tracks');
       return response.data.tracks || [];
     } catch {
       return [];

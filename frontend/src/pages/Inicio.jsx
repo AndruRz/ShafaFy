@@ -204,6 +204,7 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
   const loadAll = async () => {
     loadRecentTracks();
     loadRelatedArtists();
+    loadRecommendedTracks(); // sin argumentos
     loadMayLike();
   };
 
@@ -224,9 +225,9 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
     setLoadingArtists(false);
   };
 
-  const loadRecommendedTracks = async (artistId, artistName) => {
+  const loadRecommendedTracks = async () => {
     setLoadingRecom(true);
-    const data = await graphService.getRecommendedTracks(artistId, artistName);
+    const data = await graphService.getRecommendedTracks();
     setRecommendedTracks(data);
     setLoadingRecom(false);
   };
@@ -366,42 +367,40 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
       {/* ══════════════════════════════════════════════════════════════════════
           3. CANCIONES RECOMENDADAS POR COLABORACIONES
       ══════════════════════════════════════════════════════════════════════ */}
-      {(currentTrack || recommendedTracks.length > 0) && (
-        <div className="inicio-section">
-          <div className="inicio-section-header">
-            <div className="inicio-section-title-block">
-              <span className="inicio-section-eyebrow">Porque escuchas a {currentTrack?.artist || '...'}</span>
-              <h2 className="inicio-section-title">Canciones recomendadas</h2>
-              <p className="inicio-section-sub">Por colaboraciones con el artista actual</p>
-            </div>
+      <div className="inicio-section">
+        <div className="inicio-section-header">
+          <div className="inicio-section-title-block">
+            <span className="inicio-section-eyebrow">Basado en tu historial</span>
+            <h2 className="inicio-section-title">Canciones recomendadas</h2>
+            <p className="inicio-section-sub">Artistas relacionados a lo que escuchas este mes</p>
           </div>
-
-          {loadingRecom ? (
-            <SkeletonRow count={5} />
-          ) : recommendedTracks.length === 0 ? (
-            <div className="inicio-empty">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="28" height="28">
-                <path d="M9 19V6l12-3v13M9 19c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm12-3c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2z"/>
-              </svg>
-              Sin colaboraciones encontradas para este artista.
-            </div>
-          ) : (
-            <Carousel>
-              {recommendedTracks.map(track => (
-                <TrackCardSquare
-                  key={track.id}
-                  track={track}
-                  isActive={currentTrack?.id === track.id}
-                  isPlaying={isPlaying}
-                  youtubeLoading={youtubeLoading}
-                  reason={track.reason}
-                  onClick={() => onPlayTrack(normalizeTrack(track), 'recommended')}
-                />
-              ))}
-            </Carousel>
-          )}
         </div>
-      )}
+
+        {loadingRecom ? (
+          <SkeletonRow count={5} />
+        ) : recommendedTracks.length === 0 ? (
+          <div className="inicio-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="28" height="28">
+              <path d="M9 19V6l12-3v13M9 19c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm12-3c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2z"/>
+            </svg>
+            Escucha más música este mes para obtener recomendaciones.
+          </div>
+        ) : (
+          <Carousel>
+            {recommendedTracks.map(track => (
+              <TrackCardSquare
+                key={track.id}
+                track={track}
+                isActive={currentTrack?.id === track.id}
+                isPlaying={isPlaying}
+                youtubeLoading={youtubeLoading}
+                reason={track.reason}
+                onClick={() => onPlayTrack(normalizeTrack(track), 'recommended')}
+              />
+            ))}
+          </Carousel>
+        )}
+      </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
           4. ARTISTAS QUE TE PUEDEN GUSTAR
