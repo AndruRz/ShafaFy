@@ -70,6 +70,7 @@ function MisCanciones({ onClose, onPlayTrack, onTracksLoaded, currentTrack, isPl
       id:         fav.trackId,
       name:       fav.trackName,
       artist:     fav.artistName,
+      artistId:   fav.artistId,   // 👈 esto faltaba
       album:      fav.albumName,
       albumImage: fav.albumImage,
       genre:      fav.genre,

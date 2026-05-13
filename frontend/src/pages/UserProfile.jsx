@@ -58,14 +58,15 @@ function UserProfile({ user, onClose, onPlayTrack, onTracksLoaded, currentTrack,
   const initials   = user?.fullName?.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
 
   const handlePlayTrack = (track) => {
-    onPlayTrack({
-      id:         track.trackId,
-      name:       track.trackName,
-      artist:     track.artistName,
-      album:      track.albumName,
-      albumImage: track.albumImage,
-      genre:      track.genre,
-    });
+  onPlayTrack({
+    id:         track.trackId,
+    name:       track.trackName,
+    artist:     track.artistName,
+    artistId:   track.artistId,   // 👈 agregar
+    album:      track.albumName   || '',
+    albumImage: track.albumImage  || '',
+    genre:      track.genre       || 'unknown',
+  });
   };
 
   // ── Loading ──────────────────────────────────────────────────────────────────

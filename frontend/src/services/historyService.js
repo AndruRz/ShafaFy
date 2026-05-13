@@ -20,7 +20,7 @@ const historyService = {
         .filter(Boolean);
 
       const primaryName = allArtistNames[0] || track.artist;
-      const primaryId = allArtistIds[0] || null; // No hagas fallback al nombre
+      const primaryId = allArtistIds[0] || allArtistNames[0] || 'unknown'; 
 
       await api.post('/history/play', {
         trackId:      track.id,
