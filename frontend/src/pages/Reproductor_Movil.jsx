@@ -36,7 +36,7 @@ function Reproductor_Movil({
     img.onload = () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       canvas.width  = 50;
       canvas.height = 50;
       ctx.drawImage(img, 0, 0, 50, 50);

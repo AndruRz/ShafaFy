@@ -402,53 +402,6 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
         )}
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          4. ARTISTAS QUE TE PUEDEN GUSTAR
-      ══════════════════════════════════════════════════════════════════════ */}
-      <div className="inicio-section">
-        <div className="inicio-section-header">
-          <div className="inicio-section-title-block">
-            <span className="inicio-section-eyebrow">Descubre</span>
-            <h2 className="inicio-section-title">Artistas que te pueden gustar</h2>
-            <p className="inicio-section-sub">Basado en lo que escuchan usuarios como tú</p>
-          </div>
-          <div className="inicio-section-actions">
-            <button className="inicio-graph-btn" onClick={() => setShowGraphModal(true)}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="5"  cy="5"  r="2"/><circle cx="19" cy="5"  r="2"/>
-                <circle cx="12" cy="19" r="2"/><circle cx="5"  cy="12" r="2"/>
-                <line x1="7" y1="5" x2="17" y2="5"/>
-                <line x1="5" y1="7" x2="5" y2="10"/>
-                <line x1="7" y1="12" x2="10" y2="17"/>
-                <line x1="19" y1="7" x2="14" y2="17"/>
-              </svg>
-              Ver grafo
-            </button>
-          </div>
-        </div>
-
-        {loadingMayLike ? (
-          <SkeletonRow count={5} isArtist />
-        ) : mayLikeArtists.length === 0 ? (
-          <div className="inicio-empty">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="28" height="28">
-              <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
-            </svg>
-            Necesitamos más datos de escucha para sugerirte artistas.
-          </div>
-        ) : (
-          <Carousel>
-            {mayLikeArtists.map(artist => (
-              <ArtistCardSquare
-                key={artist.artistId}
-                artist={artist}
-                onClick={() => handleOpenArtist(artist)}
-              />
-            ))}
-          </Carousel>
-        )}
-      </div>
-
       {/* ── Modal del grafo ── */}
       {showGraphModal && (
         <GraphModal onClose={() => setShowGraphModal(false)} />
