@@ -192,7 +192,7 @@ exports.updateGraph = async (userId, artistList) => {
           updateOne: {
             filter: { artistAId: idA, artistBId: idB, connectionType: 'collaboration' },
             update: {
-              $inc: { weight: 5 }, // colaboración vale más que colistened
+              $inc: { weight: 5 },
               $set: { artistAName: nameA, artistBName: nameB, updatedAt: new Date() },
               $addToSet: { users: userId },
             },
@@ -200,6 +200,19 @@ exports.updateGraph = async (userId, artistList) => {
           },
         });
       }
+
+      // ── 3. Si el artista es nuevo en el grafo → enriquecer con Spotify ────
+      // Se hace en background para no bloquear el registro de reproducción.
+      // "Nuevo" = no tiene ninguna arista 'related' todavía.
+      ArtistGraph.findOne({
+        $or: [{ artistAId: newId }, { artistBId: newId }],
+        connectionType: 'related',
+      }).then(existing => {
+        if (!existing) {
+          addSpotifyRelatedArtists(newId, newName).catch(() => {});
+        }
+      }).catch(() => {});
+
     }
 
     if (ops.length > 0) await ArtistGraph.bulkWrite(ops);
@@ -262,6 +275,51 @@ const addCollaborationsToGraph = async (artistId, artistName) => {
     }
   } catch (err) {
     console.warn(`⚠️ Error buscando colaboraciones de ${artistName}:`, err.message);
+  }
+};
+
+// Llama al endpoint de Spotify y guarda aristas tipo 'related'
+const addSpotifyRelatedArtists = async (artistId, artistName) => {
+  try {
+    // Evitar re-fetch si ya existe alguna arista 'related' para este artista
+    const existing = await ArtistGraph.findOne({
+      $or: [{ artistAId: artistId }, { artistBId: artistId }],
+      connectionType: 'related',
+    });
+    if (existing) return; // ya fue procesado
+
+    const token   = await getSpotifyToken();
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const res = await axios.get(
+      `https://api.spotify.com/v1/artists/${artistId}/related-artists`,
+      { headers }
+    );
+
+    const related = res.data.artists || [];
+    const ops     = [];
+
+    for (const r of related.slice(0, 20)) {
+      const [idA, nameA, idB, nameB] =
+        artistId < r.id
+          ? [artistId, artistName, r.id, r.name]
+          : [r.id, r.name, artistId, artistName];
+
+      ops.push({
+        updateOne: {
+          filter: { artistAId: idA, artistBId: idB, connectionType: 'related' },
+          update: {
+            $inc: { weight: 3 },
+            $set: { artistAName: nameA, artistBName: nameB, updatedAt: new Date() },
+          },
+          upsert: true,
+        },
+      });
+    }
+
+    if (ops.length > 0) await ArtistGraph.bulkWrite(ops);
+  } catch (err) {
+    console.warn(`⚠️ related-artists falló para ${artistName}:`, err.message);
   }
 };
 
@@ -343,9 +401,12 @@ exports.getRelatedArtists = async (req, res) => {
       }
     }
 
-    const artists = [...related.values()]
-      .sort((a, b) => b.weight - a.weight)
-      .slice(0, 10);
+    const seen = new Map(); // nombre normalizado → artista
+    for (const a of [...related.values()].sort((a, b) => b.weight - a.weight)) {
+      const key = (a.artistName || '').toLowerCase().trim();
+      if (!seen.has(key)) seen.set(key, a);
+    }
+    const artists = [...seen.values()].slice(0, 10);
 
     // 6. Enriquecer con imagen de Spotify
     if (artists.length > 0) {

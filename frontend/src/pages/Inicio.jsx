@@ -217,13 +217,19 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
   };
 
   // ─── FIX: enriquecer con Spotify para obtener imagen + ID real ───────────────
-  const loadRelatedArtists = async () => {
-    setLoadingArtists(true);
-    const data = await graphService.getRelatedArtists();
-    const enriched = await enrichArtistsWithSpotify(data);
-    setRelatedArtists(enriched);
-    setLoadingArtists(false);
-  };
+    const loadRelatedArtists = async () => {
+      setLoadingArtists(true);
+      const data = await graphService.getRelatedArtists();
+      const enriched = await enrichArtistsWithSpotify(data);
+
+      // ✅ Deduplicar por artistId real (por si el enriquecimiento colisiona)
+      const unique = Array.from(
+        new Map(enriched.map(a => [a.artistId, a])).values()
+      );
+
+      setRelatedArtists(unique);
+      setLoadingArtists(false);
+    };
 
   const loadRecommendedTracks = async () => {
     setLoadingRecom(true);
@@ -354,8 +360,8 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
         ) : (
           <Carousel>
             {relatedArtists.map(artist => (
-              <ArtistCardSquare
-                key={artist.artistId}
+            <ArtistCardSquare
+              key={`${artist.artistId}-${artist.artistName}`}
                 artist={artist}
                 onClick={() => handleOpenArtist(artist)}
               />
