@@ -1,10 +1,12 @@
 // controllers/historyController.js
 const PlayHistory = require('../models/PlayHistory');
 const graphCtrl   = require('./graphController');
+const recCtrl     = require('./trackRecommendationController'); // ← NUEVO
 
 // ─── POST /api/history/play ───────────────────────────────────────────────────
 // Registra una reproducción. Guarda solo el artista PRINCIPAL (primero del string).
 // Pasa la lista completa de artistas al graphController para construir las aristas.
+// También alimenta el pool de TrackRecommendation para el sistema colaborativo.
 exports.registerPlay = async (req, res) => {
   try {
     const {
@@ -27,7 +29,6 @@ exports.registerPlay = async (req, res) => {
     const year  = now.getFullYear();
 
     // Upsert: si existe incrementa playCount, si no lo crea
-    // artistName y artistId ya vienen limpios (solo el principal) desde el frontend
     const record = await PlayHistory.findOneAndUpdate(
       { userId: req.userId, trackId, month, year },
       {
@@ -52,8 +53,9 @@ exports.registerPlay = async (req, res) => {
       playCount: record.playCount,
     });
 
-    // ── Actualizar grafo en background ────────────────────────────────────────
-    // Construir lista de { id, name } para cada artista de la canción
+    // ── Tareas en background (no bloquean la respuesta) ───────────────────────
+
+    // 1. Actualizar grafo de artistas
     const names = allArtists.length   > 0 ? allArtists   : [artistName];
     const ids   = allArtistIds.length > 0 ? allArtistIds : [artistId];
 
@@ -67,6 +69,19 @@ exports.registerPlay = async (req, res) => {
     if (artistList.length > 0) {
       graphCtrl.updateGraph(req.userId, artistList).catch(() => {});
     }
+
+    // 2. Alimentar el pool de canciones recomendables ← NUEVO
+    // Guardamos la canción con el artista PRINCIPAL (igual que PlayHistory)
+    // para que el sistema colaborativo pueda encontrarla via ArtistGraph
+    recCtrl.upsertTrack(req.userId, {
+      trackId,
+      trackName,
+      artistId,
+      artistName,
+      albumName:  albumName  || '',
+      albumImage: albumImage || '',
+      genre:      genre      || 'unknown',
+    }).catch(() => {});
 
   } catch (error) {
     console.error('❌ Error en registerPlay:', error);
@@ -110,7 +125,6 @@ exports.getTopTracks = async (req, res) => {
 
 // ─── GET /api/history/top-artists ────────────────────────────────────────────
 // Agrupa por artistId (ya limpio = solo artista principal) y suma reproducciones.
-// Así "LATIN MAFIA" aparece una sola vez aunque haya canciones con feat.
 exports.getTopArtists = async (req, res) => {
   try {
     const now   = new Date();
@@ -125,7 +139,6 @@ exports.getTopArtists = async (req, res) => {
           year,
         },
       },
-      // Agrupar por artistId limpio
       {
         $group: {
           _id:        '$artistId',

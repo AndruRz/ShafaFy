@@ -451,7 +451,7 @@ exports.getRecommendedTracks = async (req, res) => {
   try {
     const now    = new Date();
     const userId = req.userId;
-
+ 
     // 1. Top artistas del usuario este mes
     const history = await PlayHistory.find({
       userId,
@@ -461,7 +461,7 @@ exports.getRecommendedTracks = async (req, res) => {
       .sort({ playCount: -1 })
       .limit(10)
       .select('artistId artistName trackId');
-
+ 
     if (history.length === 0) {
       return res.status(200).json({
         success: true,
@@ -469,10 +469,10 @@ exports.getRecommendedTracks = async (req, res) => {
         message: 'Escucha más música para obtener recomendaciones',
       });
     }
-
+ 
     const listenedArtistIds = new Set(history.map(h => h.artistId));
     const listenedTrackIds  = new Set(history.map(h => h.trackId));
-
+ 
     // 2. Aristas del grafo relacionadas a esos artistas
     let edges = await ArtistGraph.find({
       $or: [
@@ -482,7 +482,7 @@ exports.getRecommendedTracks = async (req, res) => {
     })
       .sort({ weight: -1 })
       .limit(80);
-
+ 
     // Si hay pocas aristas, enriquecer con colaboraciones de Spotify
     if (edges.length < 5) {
       for (const h of history.slice(0, 3)) {
@@ -497,26 +497,24 @@ exports.getRecommendedTracks = async (req, res) => {
         .sort({ weight: -1 })
         .limit(80);
     }
-
+ 
     // 3. Construir mapa de artistas vecinos (no escuchados por el usuario)
-    //    artistId → { artistId, artistName, weight, sourceArtistName }
     const neighborMap = new Map();
-
+ 
     for (const edge of edges) {
       const isA          = listenedArtistIds.has(edge.artistAId);
       const neighborId   = isA ? edge.artistBId   : edge.artistAId;
       const neighborName = isA ? edge.artistBName : edge.artistAName;
       const sourceName   = isA ? edge.artistAName : edge.artistBName;
-
-      if (listenedArtistIds.has(neighborId)) continue; // ya lo escucha
-
+ 
+      if (listenedArtistIds.has(neighborId)) continue;
+ 
       const existing = neighborMap.get(neighborId);
       if (existing) {
         existing.weight += edge.weight;
-        // guardar el artista fuente con más peso (el que mejor justifica la recomendación)
         if (edge.weight > existing.topWeight) {
-          existing.topWeight      = edge.weight;
-          existing.sourceArtist   = sourceName;
+          existing.topWeight    = edge.weight;
+          existing.sourceArtist = sourceName;
         }
       } else {
         neighborMap.set(neighborId, {
@@ -528,14 +526,13 @@ exports.getRecommendedTracks = async (req, res) => {
         });
       }
     }
-
+ 
     // Ordenar vecinos por peso y tomar los mejores 6
     const topNeighbors = [...neighborMap.values()]
       .sort((a, b) => b.weight - a.weight)
       .slice(0, 6);
-
+ 
     // Si no hay vecinos nuevos, usar artistas del historial directamente
-    // (recomendar canciones de los mismos artistas que quizás no escuchó)
     const targetArtists = topNeighbors.length > 0
       ? topNeighbors
       : history.slice(0, 4).map(h => ({
@@ -544,47 +541,48 @@ exports.getRecommendedTracks = async (req, res) => {
           weight:       1,
           sourceArtist: h.artistName,
         }));
-
-    // 4. Buscar top-tracks en Spotify para cada artista vecino
+ 
+    // 4. Buscar top-tracks en Spotify para cada artista vecino (FALLBACK)
     const token   = await getSpotifyToken();
     const headers = { Authorization: `Bearer ${token}` };
     const tracks  = [];
-
+ 
     for (const neighbor of targetArtists.slice(0, 5)) {
       try {
         const spotifyRes = await axios.get(
           `https://api.spotify.com/v1/artists/${neighbor.artistId}/top-tracks`,
           { headers, params: { market: 'US' } }
         );
-
+ 
         const topTracks = (spotifyRes.data.tracks || [])
-          .filter(t => !listenedTrackIds.has(t.id))   // excluir ya escuchadas
+          .filter(t => !listenedTrackIds.has(t.id))
           .slice(0, 3)
           .map(t => ({
-            id:           t.id,
-            name:         t.name,
-            artist:       t.artists.map(a => a.name).join(', '),
-            artistId:     t.artists[0]?.id,
-            album:        t.album?.name,
-            albumImage:   t.album?.images[0]?.url || null,
-            duration:     t.duration_ms,
-            popularity:   t.popularity,
-            reason:       `Porque escuchas a ${neighbor.sourceArtist}`,
+            id:         t.id,
+            name:       t.name,
+            artist:     t.artists.map(a => a.name).join(', '),
+            artistId:   t.artists[0]?.id,
+            album:      t.album?.name,
+            albumImage: t.album?.images[0]?.url || null,
+            duration:   t.duration_ms,
+            popularity: t.popularity,
+            reason:     `Porque escuchas a ${neighbor.sourceArtist}`,
+            source:     'spotify_fallback', // ← indica que viene de Spotify, no del pool
           }));
-
+ 
         tracks.push(...topTracks);
         await new Promise(r => setTimeout(r, 100));
       } catch (_) {}
     }
-
+ 
     // Deduplicar y limitar
     const unique = Array.from(new Map(tracks.map(t => [t.id, t])).values())
       .slice(0, 12);
-
+ 
     res.status(200).json({ success: true, tracks: unique });
-
+ 
   } catch (error) {
-    console.error('❌ Error en getRecommendedTracks:', error.message);
+    console.error('❌ Error en getRecommendedTracks (spotify fallback):', error.message);
     res.status(500).json({ success: false, message: 'Error al obtener canciones recomendadas' });
   }
 };
