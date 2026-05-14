@@ -40,6 +40,7 @@ app.use('/api/history', require('./routes/history'));
 app.use('/api/favorites', require('./routes/favorites'));
 app.use('/api/graph',     require('./routes/graph')); 
 app.use('/api/forum',     require('./routes/forum'));
+app.use('/api/recommendations', require('./routes/recommendations'));
 
 // Ruta de prueba (raíz)
 app.get('/', (req, res) => {

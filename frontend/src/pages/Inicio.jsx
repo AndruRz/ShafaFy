@@ -1,8 +1,9 @@
 // src/pages/Inicio.jsx
 import { useState, useEffect, useRef } from 'react';
-import graphService    from '../services/graphService';
-import spotifyService  from '../services/spotifyService';
-import GraphModal      from './GraphModal';
+import graphService              from '../services/graphService';
+import spotifyService            from '../services/spotifyService';
+import GraphModal                from './GraphModal';
+import RecommendationGraphModal  from './RecommendationGraphModal';
 import './css/Inicio.css';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -138,9 +139,6 @@ function Carousel({ children, isEmpty }) {
 }
 
 // ─── Helper: enriquecer artistas con imagen + ID real de Spotify ──────────────
-// El grafo solo guarda artistName/artistId internos. Este helper busca en
-// Spotify para obtener la imagen de perfil y el ID oficial, que es el que
-// necesita ArtistProfile para cargar las canciones correctamente.
 const enrichArtistsWithSpotify = async (artists) => {
   const enriched = await Promise.all(
     artists.map(async (artist) => {
@@ -179,32 +177,29 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
   const [relatedArtists,    setRelatedArtists]     = useState([]);
   const [recommendedTracks, setRecommendedTracks]  = useState([]);
   const [mayLikeArtists,    setMayLikeArtists]     = useState([]);
-  const [showGraphModal,    setShowGraphModal]      = useState(false);
+
+  // ── Modales de grafo ────────────────────────────────────────────────────────
+  const [showGraphModal,    setShowGraphModal]     = useState(false); // grafo de artistas
+  const [showRecGraphModal, setShowRecGraphModal]  = useState(false); // grafo de recomendaciones
 
   const [loadingRecent,  setLoadingRecent]  = useState(true);
   const [loadingArtists, setLoadingArtists] = useState(true);
   const [loadingRecom,   setLoadingRecom]   = useState(true);
   const [loadingMayLike, setLoadingMayLike] = useState(true);
 
-  // Guardar la lista de canciones recientes para que next/prev funcione
-  // dentro del carrusel "Sigue escuchando"
-  const recentTracksRef = useRef([]);
+  // Lista normalizada para que next/prev funcione en "Sigue escuchando"
+  const recentTracksRef      = useRef([]);
+  // Lista normalizada para que next/prev funcione en "Canciones recomendadas"
+  const recommendedTracksRef = useRef([]);
 
   useEffect(() => {
     loadAll();
   }, []);
 
-  // Cuando cambia la canción actual, cargar recomendaciones por colaboraciones
-  useEffect(() => {
-    if (currentTrack?.artistId && currentTrack?.artist) {
-      loadRecommendedTracks(currentTrack.artistId, currentTrack.artist);
-    }
-  }, [currentTrack?.artistId]);
-
   const loadAll = async () => {
     loadRecentTracks();
     loadRelatedArtists();
-    loadRecommendedTracks(); // sin argumentos
+    loadRecommendedTracks();
     loadMayLike();
   };
 
@@ -216,32 +211,28 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
     setLoadingRecent(false);
   };
 
-  // ─── FIX: enriquecer con Spotify para obtener imagen + ID real ───────────────
-    const loadRelatedArtists = async () => {
-      setLoadingArtists(true);
-      const data = await graphService.getRelatedArtists();
-      const enriched = await enrichArtistsWithSpotify(data);
-
-      // ✅ Deduplicar por artistId real (por si el enriquecimiento colisiona)
-      const unique = Array.from(
-        new Map(enriched.map(a => [a.artistId, a])).values()
-      );
-
-      setRelatedArtists(unique);
-      setLoadingArtists(false);
-    };
+  const loadRelatedArtists = async () => {
+    setLoadingArtists(true);
+    const data     = await graphService.getRelatedArtists();
+    const enriched = await enrichArtistsWithSpotify(data);
+    const unique   = Array.from(
+      new Map(enriched.map(a => [a.artistId, a])).values()
+    );
+    setRelatedArtists(unique);
+    setLoadingArtists(false);
+  };
 
   const loadRecommendedTracks = async () => {
     setLoadingRecom(true);
     const data = await graphService.getRecommendedTracks();
     setRecommendedTracks(data);
+    recommendedTracksRef.current = data.map(normalizeTrack);
     setLoadingRecom(false);
   };
 
-  // ─── FIX: enriquecer con Spotify para obtener imagen + ID real ───────────────
   const loadMayLike = async () => {
     setLoadingMayLike(true);
-    const data = await graphService.getMayLike();
+    const data     = await graphService.getMayLike();
     const enriched = await enrichArtistsWithSpotify(data);
     setMayLikeArtists(enriched);
     setLoadingMayLike(false);
@@ -249,26 +240,34 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
 
   const userName = user?.fullName?.split(' ')[0] || user?.username || 'tú';
 
-  // Normalizar track al formato estándar que usa el reproductor
+  // ── Normalizar track al formato estándar del reproductor ──────────────────
   const normalizeTrack = (t) => ({
-    id:         t.trackId  || t.id,
+    id:         t.trackId    || t.id,
     name:       t.trackName  || t.name,
     artist:     t.artistName || t.artist,
     artistId:   t.artistId,
-    album:      t.albumName  || t.album,
-    albumImage: t.albumImage,
-    genre:      t.genre,
+    artistIds:  t.artistIds  || t.artistId || '',
+    album:      t.albumName  || t.album    || '',
+    albumImage: t.albumImage || '',
+    genre:      t.genre      || '',
   });
 
-  // Al reproducir desde "Sigue escuchando" pasamos la lista completa normalizada
-  // para que next/prev funcione en orden dentro del carrusel.
+  // ── "Sigue escuchando": pasa la lista completa para que next/prev funcione ─
   const handlePlayRecent = (track) => {
     onPlayTrack(normalizeTrack(track), 'recent', recentTracksRef.current);
   };
 
-  // Al abrir un artista desde el grafo, usamos el artistId ya enriquecido
-  // (ID real de Spotify). Pasamos un fallback vacío; ArtistProfile buscará
-  // las canciones él mismo si el backend no las trae.
+  // ── "Canciones recomendadas": pasa su propia lista normalizada ────────────
+  const handlePlayRecommended = (track) => {
+    onPlayTrack(normalizeTrack(track), 'recommended', recommendedTracksRef.current);
+  };
+
+  // ── Reproducir desde el panel lateral del grafo de recomendaciones ─────────
+  const handlePlayFromRecGraph = (track) => {
+    onPlayTrack(normalizeTrack(track), 'recommended', recommendedTracksRef.current);
+    setShowRecGraphModal(false);
+  };
+
   const handleOpenArtist = (artist) => {
     const fallback = (artist.tracks || []).map(t => ({
       id:         t.trackId   || t.id,
@@ -286,9 +285,9 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
   return (
     <div className="inicio-page">
 
-      {/* ══════════════════════════════════════════════════════════════════════
+      {/* ════════════════════════════════════════════════════════════════════
           1. SIGUE ESCUCHANDO
-      ══════════════════════════════════════════════════════════════════════ */}
+      ════════════════════════════════════════════════════════════════════ */}
       <div className="inicio-section">
         <div className="inicio-section-header">
           <div className="inicio-section-title-block">
@@ -323,19 +322,20 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
         )}
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════════
+      {/* ════════════════════════════════════════════════════════════════════
           2. ARTISTAS RELACIONADOS (GRAFO)
-      ══════════════════════════════════════════════════════════════════════ */}
+      ════════════════════════════════════════════════════════════════════ */}
       <div className="inicio-section">
         <div className="inicio-section-header">
           <div className="inicio-section-title-block">
             <span className="inicio-section-eyebrow">Grafo de artistas</span>
             <h2 className="inicio-section-title">Artistas relacionados</h2>
-            <p className="inicio-section-sub">Basado en lo que escuchas</p>
+            <p className="inicio-section-sub">Basado en lo que escuchas este mes</p>
           </div>
           <div className="inicio-section-actions">
+            {/* Botón "Conocer el grafo" — abre GraphModal de artistas */}
             <button className="inicio-graph-btn" onClick={() => setShowGraphModal(true)}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
                 <circle cx="5"  cy="5"  r="2"/><circle cx="19" cy="5"  r="2"/>
                 <circle cx="12" cy="19" r="2"/><circle cx="5"  cy="12" r="2"/>
                 <line x1="7" y1="5" x2="17" y2="5"/>
@@ -343,7 +343,7 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
                 <line x1="7" y1="12" x2="10" y2="17"/>
                 <line x1="19" y1="7" x2="14" y2="17"/>
               </svg>
-              Ver grafo
+              Conocer el grafo
             </button>
           </div>
         </div>
@@ -360,8 +360,8 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
         ) : (
           <Carousel>
             {relatedArtists.map(artist => (
-            <ArtistCardSquare
-              key={`${artist.artistId}-${artist.artistName}`}
+              <ArtistCardSquare
+                key={`${artist.artistId}-${artist.artistName}`}
                 artist={artist}
                 onClick={() => handleOpenArtist(artist)}
               />
@@ -370,16 +370,32 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
         )}
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          3. CANCIONES RECOMENDADAS POR COLABORACIONES
-      ══════════════════════════════════════════════════════════════════════ */}
+      {/* ════════════════════════════════════════════════════════════════════
+          3. CANCIONES RECOMENDADAS — FILTRADO COLABORATIVO
+      ════════════════════════════════════════════════════════════════════ */}
       <div className="inicio-section">
         <div className="inicio-section-header">
           <div className="inicio-section-title-block">
-            <span className="inicio-section-eyebrow">Basado en tu historial</span>
+            <span className="inicio-section-eyebrow">Basado en otros usuarios</span>
             <h2 className="inicio-section-title">Canciones recomendadas</h2>
             <p className="inicio-section-sub">Artistas relacionados a lo que escuchas este mes</p>
           </div>
+          {/* Botón "Ver grafo" — abre RecommendationGraphModal */}
+          {recommendedTracks.length > 0 && (
+            <div className="inicio-section-actions">
+              <button
+                className="inicio-graph-btn inicio-graph-btn--gold"
+                onClick={() => setShowRecGraphModal(true)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                  <path d="M9 19V6l12-3v13"/>
+                  <circle cx="6" cy="18" r="3"/>
+                  <circle cx="18" cy="16" r="3"/>
+                </svg>
+                Ver grafo
+              </button>
+            </div>
+          )}
         </div>
 
         {loadingRecom ? (
@@ -393,24 +409,33 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
           </div>
         ) : (
           <Carousel>
-            {recommendedTracks.map(track => (
+            {recommendedTracks.map((track, i) => (
               <TrackCardSquare
-                key={track.id}
+                key={track.trackId || track.id || i}
                 track={track}
-                isActive={currentTrack?.id === track.id}
+                isActive={currentTrack?.id === (track.trackId || track.id)}
                 isPlaying={isPlaying}
                 youtubeLoading={youtubeLoading}
                 reason={track.reason}
-                onClick={() => onPlayTrack(normalizeTrack(track), 'recommended')}
+                onClick={() => handlePlayRecommended(track)}
               />
             ))}
           </Carousel>
         )}
       </div>
 
-      {/* ── Modal del grafo ── */}
+      {/* ── Modal grafo de ARTISTAS ── */}
       {showGraphModal && (
         <GraphModal onClose={() => setShowGraphModal(false)} />
+      )}
+
+      {/* ── Modal grafo de RECOMENDACIONES ── */}
+      {showRecGraphModal && (
+        <RecommendationGraphModal
+          onClose={() => setShowRecGraphModal(false)}
+          recommendedTracks={recommendedTracks}
+          onPlayTrack={handlePlayFromRecGraph}
+        />
       )}
 
     </div>
