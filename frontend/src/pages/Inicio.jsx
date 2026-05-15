@@ -380,22 +380,19 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
             <h2 className="inicio-section-title">Canciones recomendadas</h2>
             <p className="inicio-section-sub">Artistas relacionados a lo que escuchas este mes</p>
           </div>
-          {/* Botón "Ver grafo" — abre RecommendationGraphModal */}
-          {recommendedTracks.length > 0 && (
-            <div className="inicio-section-actions">
-              <button
-                className="inicio-graph-btn inicio-graph-btn--gold"
-                onClick={() => setShowRecGraphModal(true)}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                  <path d="M9 19V6l12-3v13"/>
-                  <circle cx="6" cy="18" r="3"/>
-                  <circle cx="18" cy="16" r="3"/>
-                </svg>
-                Ver grafo
-              </button>
-            </div>
-          )}
+          <div className="inicio-section-actions">
+        <button
+          className="inicio-graph-btn inicio-graph-btn--gold"
+          onClick={() => setShowRecGraphModal(true)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+            <path d="M9 19V6l12-3v13"/>
+            <circle cx="6" cy="18" r="3"/>
+            <circle cx="18" cy="16" r="3"/>
+          </svg>
+          Ver grafo
+        </button>
+      </div>
         </div>
 
         {loadingRecom ? (
