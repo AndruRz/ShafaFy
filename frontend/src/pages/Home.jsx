@@ -1,6 +1,7 @@
 // src/pages/Home.jsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import StaticArtistGraph from "../components/StaticArtistGraph";
 import "../App.css";
 
 // Componente de la Landing Page
@@ -603,6 +604,7 @@ function Home() {
             </div>
           </div>
 
+          {/* ── BENEFIT CARD 03: usa StaticArtistGraph ── */}
           <div className="benefit-card benefit-generator">
             <div className="benefit-number">03</div>
             <div className="benefit-content">
@@ -615,62 +617,10 @@ function Home() {
                 </p>
               </div>
             </div>
-            
+
             <div className="graph-generator">
               <h4 className="generator-title">Selecciona el tipo de grafo a visualizar:</h4>
-              
-              <div className="generator-controls">
-                <button className="graph-btn active">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 18V5l12-2v13"/>
-                    <circle cx="6" cy="18" r="3"/>
-                    <circle cx="18" cy="16" r="3"/>
-                  </svg>
-                  <span>Canciones Top</span>
-                </button>
-                
-                <button className="graph-btn">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
-                  </svg>
-                  <span>Artistas Top</span>
-                </button>
-                
-                <button className="graph-btn">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="7" height="7"/>
-                    <rect x="14" y="3" width="7" height="7"/>
-                    <rect x="3" y="14" width="7" height="7"/>
-                    <rect x="14" y="14" width="7" height="7"/>
-                  </svg>
-                  <span>Álbumes Top</span>
-                </button>
-              </div>
-
-              <div className="graph-display">
-                <div className="graph-placeholder">
-                  <svg viewBox="0 0 200 200" fill="none">
-                    <circle cx="100" cy="40" r="15" fill="var(--color-primary)" opacity="0.3"/>
-                    <circle cx="50" cy="100" r="15" fill="var(--color-secondary)" opacity="0.3"/>
-                    <circle cx="150" cy="100" r="15" fill="var(--color-accent)" opacity="0.3"/>
-                    <circle cx="75" cy="160" r="15" fill="var(--color-primary)" opacity="0.3"/>
-                    <circle cx="125" cy="160" r="15" fill="var(--color-secondary)" opacity="0.3"/>
-                    
-                    <line x1="100" y1="40" x2="50" y2="100" stroke="var(--color-primary)" strokeWidth="2" opacity="0.3"/>
-                    <line x1="100" y1="40" x2="150" y2="100" stroke="var(--color-primary)" strokeWidth="2" opacity="0.3"/>
-                    <line x1="50" y1="100" x2="75" y2="160" stroke="var(--color-secondary)" strokeWidth="2" opacity="0.3"/>
-                    <line x1="150" y1="100" x2="125" y2="160" stroke="var(--color-secondary)" strokeWidth="2" opacity="0.3"/>
-                    <line x1="75" y1="160" x2="125" y2="160" stroke="var(--color-accent)" strokeWidth="2" opacity="0.3"/>
-                  </svg>
-                  <p className="placeholder-text">
-                    <span className="icon-placeholder">📊</span>
-                    Funcionalidad próximamente disponible
-                  </p>
-                  <p className="placeholder-subtitle">
-                    El grafo se generará aquí según tu selección
-                  </p>
-                </div>
-              </div>
+              <StaticArtistGraph />
             </div>
           </div>
 
