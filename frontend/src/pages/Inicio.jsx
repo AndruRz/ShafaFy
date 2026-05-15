@@ -197,9 +197,9 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
   }, []);
 
   const loadAll = async () => {
-    loadRecentTracks();
+    await loadRecentTracks();        // esperar a que termine primero
+    loadRecommendedTracks();         // ahora recentTracksRef ya tiene datos
     loadRelatedArtists();
-    loadRecommendedTracks();
     loadMayLike();
   };
 
@@ -225,8 +225,13 @@ function Inicio({ user, currentTrack, isPlaying, youtubeLoading, onPlayTrack, on
   const loadRecommendedTracks = async () => {
     setLoadingRecom(true);
     const data = await graphService.getRecommendedTracks();
-    setRecommendedTracks(data);
-    recommendedTracksRef.current = data.map(normalizeTrack);
+
+    // Excluir canciones que ya están en "Sigue escuchando"
+    const recentIds = new Set(recentTracksRef.current.map(t => t.id));
+    const filtered  = data.filter(t => !recentIds.has(t.trackId || t.id));
+
+    setRecommendedTracks(filtered);
+    recommendedTracksRef.current = filtered.map(normalizeTrack);
     setLoadingRecom(false);
   };
 

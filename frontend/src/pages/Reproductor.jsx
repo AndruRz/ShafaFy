@@ -68,6 +68,7 @@ function Reproductor() {
   const userTracksRef    = useRef([]);
   const favTracksRef     = useRef([]);
   const recentTracksRef  = useRef([]);   // ← lista del carrusel "Sigue escuchando"
+  const recommendedTracksRef = useRef([]);
   const currentTrackRef  = useRef(null);
   const resultsRef       = useRef(null);
   const playerBarRef     = useRef(null);
@@ -407,9 +408,13 @@ function Reproductor() {
           'search'
         );
         break;
-      case 'recommended':
-        playQueue.current.loadTracks(tracksRef.current, 'search');
-        break;
+    case 'recommended':
+      if (trackList && trackList.length > 0) recommendedTracksRef.current = trackList;
+      playQueue.current.loadTracks(
+        recommendedTracksRef.current.length > 0 ? recommendedTracksRef.current : tracksRef.current,
+        'search'
+      );
+      break;
       case 'search':
         playQueue.current.loadTracks(tracksRef.current, 'search');
         break;
@@ -706,7 +711,13 @@ function Reproductor() {
             youtubeLoading={youtubeLoading}
             // ── FIX: pasar trackList como tercer argumento para que
             //    "Sigue escuchando" cargue la cola con su lista correcta ──
-            onPlayTrack={(track, source, trackList) => playTrack(track, source || 'search', trackList)}
+            onPlayTrack={(track, source, trackList) => {
+              // Guardar la lista de recomendadas cuando llega
+              if (source === 'recommended' && trackList?.length > 0) {
+                recommendedTracksRef.current = trackList;
+              }
+              playTrack(track, source || 'search', trackList);
+            }}
             onOpenArtist={(artistId, fallback = []) => {
               setArtistFallbackTracks(fallback);
               setSelectedArtist(artistId);
