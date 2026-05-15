@@ -143,27 +143,28 @@ La aplicación quedará disponible en **http://localhost:5173**
 ---
 
 ## 📁 Estructura del proyecto
+
+```
 ShafaFy/
 ├── backend/
-│   ├── config/          # Conexión a MongoDB
-│   ├── controllers/     # Lógica de negocio (auth, spotify, foro, grafo...)
-│   ├── middleware/       # Autenticación JWT
-│   ├── models/          # Esquemas Mongoose
-│   ├── routes/          # Endpoints REST
-│   ├── services/        # Socket.IO en tiempo real
-│   └── server.js        # Punto de entrada
+│   ├── config/           # Conexión a MongoDB
+│   ├── controllers/      # Lógica de negocio (auth, spotify, foro, grafo...)
+│   ├── middleware/        # Autenticación JWT
+│   ├── models/           # Esquemas Mongoose
+│   ├── routes/           # Endpoints REST
+│   ├── services/         # Socket.IO en tiempo real
+│   └── server.js         # Punto de entrada
 │
 └── frontend/
-├── src/
-│   ├── config/          # Instancia Axios
-│   ├── data_structures/ # Pila, Cola, Grafo, Trie, Hash Table
-│   ├── components/      # Componentes reutilizables
-│   ├── pages/           # Páginas por ruta
-│   ├── services/        # Llamadas a la API
-│   └── utils/           # Utilidades (árbol del foro)
-└── index.html
-
----
+    ├── src/
+    │   ├── config/           # Instancia Axios
+    │   ├── data_structures/  # Pila, Cola, Grafo, Trie, Hash Table
+    │   ├── components/       # Componentes reutilizables
+    │   ├── pages/            # Páginas por ruta
+    │   ├── services/         # Llamadas a la API
+    │   └── utils/            # Utilidades (árbol del foro)
+    └── index.html
+```
 
 ## 🧩 Estructuras de datos implementadas
 
